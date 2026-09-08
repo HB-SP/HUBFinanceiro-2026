@@ -160,7 +160,10 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
       <td style={{padding:"10px 16px 10px 40px",whiteSpace:"nowrap",color:T.text,fontSize:12.5,fontWeight:500}}>
         {row.label}
         {row.labelBase && row.labelBase.trim().toLowerCase() !== String(row.label).trim().toLowerCase() && (
-          <span style={{marginLeft:8,fontSize:10,color:T.textSm}}>(base: {row.labelBase})</span>
+          <span style={{marginLeft:8,fontSize:10,color:T.textSm}}
+            title={row.baseItens?.length > 1 ? row.baseItens.map(i => `${i.label}: ${fmt(i.valor)}`).join("\n") : undefined}>
+            (base: {row.labelBase}{row.baseItens?.length > 1 ? ` · ${row.baseItens.length} linhas somadas` : ""})
+          </span>
         )}
       </td>
       <td className="num" style={{padding:"10px 16px",textAlign:"right",whiteSpace:"nowrap",color:T.textMd,fontSize:12.5,fontFamily:FONT.num}}>

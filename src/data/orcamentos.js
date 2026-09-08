@@ -337,11 +337,19 @@ export const diffBaseline = (orc) => {
     const rows = [];
     g.subs.forEach(sub => {
       const atual = porSub[sub.key] || 0;
-      const bi = blItens.find(i => i.subKey === sub.key && !usados.has(i.id));
-      if (bi) usados.add(bi.id);
-      const base = bi ? (Number(bi.valor) || 0) : 0;
+      // Várias linhas da base podem apontar para a MESMA linha de 2027 (ex.:
+      // Feed B = UM Feed B + SNG Feed B + Seg. Feed B): somam numa linha só.
+      const bis = blItens.filter(i => i.subKey === sub.key && !usados.has(i.id));
+      bis.forEach(i => usados.add(i.id));
+      const bi = bis[0] || null;
+      const base = bis.reduce((s, i) => s + (Number(i.valor) || 0), 0);
       if (atual === 0 && base === 0 && !bi) return;
-      rows.push({ key: sub.key, label: sub.label, labelBase: bi?.label || null, base, atual, baseItemId: bi?.id || null });
+      rows.push({
+        key: sub.key, label: sub.label, base, atual,
+        labelBase: bis.length ? bis.map(i => i.label).join(" + ") : null,
+        baseItemId: bis.length === 1 ? bi.id : null,   // com soma, a base não edita inline
+        baseItens: bis.map(i => ({ id: i.id, label: i.label, valor: Number(i.valor) || 0 })),
+      });
     });
     blItens.filter(i => !usados.has(i.id)).forEach(i => {
       rows.push({ key: `bl_${i.id}`, label: i.label, labelBase: i.label, base: Number(i.valor) || 0, atual: 0, baseItemId: i.id, soBase: true });
