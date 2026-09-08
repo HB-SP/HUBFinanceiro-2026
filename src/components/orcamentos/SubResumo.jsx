@@ -52,7 +52,7 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
   }).filter(g => g.total > 0), [orc.servicosFixos]);
 
   const blocos = [
-    { key:"var",  titulo:"Custos variáveis", sub:`por jogo · ${numJogos} jogo${numJogos===1?"":"s"}`, cor:COR_VAR,  icon:CalendarDays, grupos:variaveis, total:totais.totalJogos, porJogo:true },
+    { key:"var",  titulo:"Custos variáveis", sub:`${numJogos} jogo${numJogos===1?"":"s"}`, cor:COR_VAR,  icon:CalendarDays, grupos:variaveis, total:totais.totalJogos, porJogo:true },
     { key:"fixo", titulo:"Custos fixos",     sub:"por edição",                                          cor:COR_FIXO, icon:Briefcase,    grupos:fixos,     total:totais.totalFixos, porJogo:false },
   ];
 
@@ -67,7 +67,6 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
         </div>
         <div style={{textAlign:"right"}}>
           <div className="num" style={{fontSize:24,fontWeight:700,color:T.text,fontFamily:FONT.num,lineHeight:1.1}}>{fmt(b.total)}</div>
-          {b.porJogo && numJogos > 0 && <div style={{fontSize:11,color:T.textSm}}>média {fmt(Math.round(b.total / numJogos))} por jogo</div>}
         </div>
       </div>
 
@@ -77,7 +76,6 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
             <tr style={{background:T.surfaceAlt||T.bg}}>
               <th style={thStyle(T, true)}>Grupo</th>
               <th style={thStyle(T)}>Orçado</th>
-              {b.porJogo && <th style={thStyle(T)}>Por jogo</th>}
               <th style={thStyle(T)}>% do bloco</th>
               <th style={{...thStyle(T), textAlign:"left", paddingLeft:20}}>Peso</th>
             </tr>
@@ -101,7 +99,6 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
                     </span>
                   </td>
                   <td style={tdNum(T, { fontWeight:700, fontSize:13.5 })}>{fmt(g.total)}</td>
-                  {b.porJogo && <td style={tdNum(T, { color:T.textMd })}>{numJogos ? fmt(Math.round(g.total / numJogos)) : "—"}</td>}
                   <td style={tdNum(T, { color:T.textMd })}>{pct.toFixed(1)}%</td>
                   <td style={{padding:"13px 20px",minWidth:140}}><Progress value={pct} T={T} color={g.color}/></td>
                 </tr>,
@@ -109,7 +106,6 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
                   <tr key={`${g.key}_${it.key}`} style={{borderTop:`1px solid ${T.border}`,background:T.surfaceAlt||T.bg}}>
                     <td style={{padding:"8px 16px 8px 54px",whiteSpace:"nowrap",color:T.textMd,fontSize:12}}>{it.label}</td>
                     <td style={tdNum(T, { padding:"8px 16px", fontSize:12, color:T.textMd })}>{fmt(it.valor)}</td>
-                    {b.porJogo && <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:T.textSm })}>{numJogos ? fmt(Math.round(it.valor / numJogos)) : ""}</td>}
                     <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:T.textSm })}>{g.total ? `${((it.valor / g.total) * 100).toFixed(1)}%` : ""}</td>
                     <td style={{padding:"8px 20px",minWidth:140}}><Progress value={g.total ? (it.valor / g.total) * 100 : 0} T={T} color={`${g.color}88`} height={3}/></td>
                   </tr>
@@ -117,12 +113,11 @@ export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao
               ];
             })}
             {b.grupos.length === 0 && (
-              <tr><td colSpan={b.porJogo ? 5 : 4} style={{padding:"14px 16px",fontSize:12,color:T.textSm}}>Nada orçado neste bloco ainda.</td></tr>
+              <tr><td colSpan={4} style={{padding:"14px 16px",fontSize:12,color:T.textSm}}>Nada orçado neste bloco ainda.</td></tr>
             )}
             <tr style={{borderTop:`2px solid ${T.borderStrong||T.border}`,background:`${b.cor}0c`,fontWeight:700}}>
               <td style={{padding:"13px 16px",color:b.cor,fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase"}}>Total {b.titulo.toLowerCase()}</td>
               <td style={tdNum(T, { color:b.cor, fontSize:14, fontWeight:700 })}>{fmt(b.total)}</td>
-              {b.porJogo && <td style={tdNum(T, { color:T.textMd })}>{numJogos ? fmt(Math.round(b.total / numJogos)) : "—"}</td>}
               <td style={tdNum(T)}>100%</td>
               <td/>
             </tr>
