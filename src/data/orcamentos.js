@@ -46,11 +46,12 @@ export const SUBS_LIVEMODE_KEYS = ["maquinas", "starlink", "downlink", "distribu
 // serviço na tabela de Operações. Persistência:
 //   orc.premissasFaixa[padrao][faixaKey][subKey] = valor absoluto
 // Célula vazia herda o valor base da premissa do padrão para aquele subKey.
-// Além de UM/Geradores/SNG, a matriz aceita pessoal (coord/prod UM mudam por
-// distância no B2) e logística (ex.: hospedagem só no B2 em SP200) — assim a
-// aba Premissas explica 100% dos jogos sem override. Célula de logística na
-// matriz vence a faixa E a logística própria da praça.
-export const SUBS_PADRAO_FAIXA_KEYS = ["um_b1", "um_b2", "um_b3", "geradores", "sng", "coord_um", "prod_um", ...SUBS_LOGISTICA.map(s => s.key)];
+// Além de UM/Geradores/SNG, a matriz aceita logística (ex.: hospedagem só no
+// B2 em SP200) — assim a aba Premissas explica 100% dos jogos sem override.
+// Célula de logística na matriz vence a faixa E a logística própria da praça.
+// PESSOAL fica fora: prestador tem cachê fixo, não varia por distância (só
+// muda se fizer mais de uma diária — e isso é ajuste no jogo, não premissa).
+export const SUBS_PADRAO_FAIXA_KEYS = ["um_b1", "um_b2", "um_b3", "geradores", "sng", ...SUBS_LOGISTICA.map(s => s.key)];
 // Pseudo-chave da matriz: quantidade de DSLRs por padrão × faixa (ex.: B3 só
 // leva DSLR em SP). Vazio herda orc.dslrQtd[padrao]; o jogo ainda pode sobrepor.
 export const MATRIZ_DSLR_QTD_KEY = "dslrQtd";
