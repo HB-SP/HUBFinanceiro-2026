@@ -3,7 +3,7 @@ import { iSty, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Stat, Badge, tableStyles } from "../ui";
 import { SUBS_LOGISTICA, logisticaDaPraca, calcOrcadoJogo } from "../../data/orcamentos";
 import { fmt, fmtK } from "../../utils";
-import { MapPin, Route, Plus, Trash2, Wallet, SlidersHorizontal, Link2, Unlink2, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { MapPin, MapPinOff, Route, Plus, Trash2, Wallet, SlidersHorizontal, Link2, Unlink2, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
 // ─── PRAÇAS & LOGÍSTICA ───────────────────────────────────────────────────────
 // Como a logística de um jogo é montada (nesta ordem):
@@ -172,12 +172,18 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
 
   // Grupos da tabela de praças: uma seção por faixa (ordem do orçamento) + "sem faixa"
   const grupos = useMemo(() => {
+    // Praças "genéricas" (sem cidade — ex.: Quartas · SP, Final · SP400) ficam
+    // num grupo próprio, separado das faixas com cidade.
+    const comCidade = pracas.filter(p => !p.generica);
     const byFaixa = faixas.map(f => ({
       key: f.key, faixa: f,
-      pracas: pracas.filter(p => p.faixaKey === f.key).sort((a, b) => a.cidade.localeCompare(b.cidade, "pt-BR")),
+      pracas: comCidade.filter(p => p.faixaKey === f.key).sort((a, b) => a.cidade.localeCompare(b.cidade, "pt-BR")),
     }));
-    const orfas = pracas.filter(p => !faixas.some(f => f.key === p.faixaKey)).sort((a, b) => a.cidade.localeCompare(b.cidade, "pt-BR"));
+    const orfas = comCidade.filter(p => !faixas.some(f => f.key === p.faixaKey)).sort((a, b) => a.cidade.localeCompare(b.cidade, "pt-BR"));
     if (orfas.length) byFaixa.push({ key:"__sem_faixa", faixa:null, pracas:orfas });
+    const genericas = pracas.filter(p => p.generica)
+      .sort((a, b) => (faixas.findIndex(f => f.key === a.faixaKey) - faixas.findIndex(f => f.key === b.faixaKey)) || a.cidade.localeCompare(b.cidade, "pt-BR"));
+    if (genericas.length) byFaixa.push({ key:"__fase", faixa:null, generica:true, pracas:genericas });
     return byFaixa;
   }, [faixas, pracas]);
 
@@ -292,7 +298,9 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
             </thead>
             <tbody>
               {grupos.map(g => {
-                const st = info.porFaixa.get(g.key) || { pracas:0, jogos:0, proprias:0 };
+                const st = g.generica
+                  ? { pracas:g.pracas.length, jogos:g.pracas.reduce((s, p) => s + (info.porPraca.get(p.id)?.jogos || 0), 0), proprias:g.pracas.filter(p => p.logistica).length }
+                  : (info.porFaixa.get(g.key) || { pracas:0, jogos:0, proprias:0 });
                 const aberto = !recolhidos.has(g.key);
                 return [
                   // Cabeçalho da faixa: os valores de referência nas mesmas colunas
@@ -301,9 +309,9 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
                     <td colSpan={3} style={{padding:"9px 14px"}}>
                       <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
                         {aberto ? <ChevronDown size={14} color={T.textSm}/> : <ChevronRight size={14} color={T.textSm}/>}
-                        <span style={{width:8,height:8,borderRadius:2,background:g.faixa ? COR_FAIXA : (T.danger||"#DC2626")}}/>
-                        <span style={{fontSize:12,fontWeight:700,color:T.text}}>{g.faixa ? g.faixa.label : "Sem faixa válida"}</span>
-                        <span style={{fontSize:11,color:T.textSm}}>{g.faixa ? "referência da faixa · por jogo" : "escolha uma faixa para estas praças"}</span>
+                        <span style={{width:8,height:8,borderRadius:2,background:g.faixa ? COR_FAIXA : g.generica ? COR_AJUSTE : (T.danger||"#DC2626")}}/>
+                        <span style={{fontSize:12,fontWeight:700,color:T.text}}>{g.faixa ? g.faixa.label : g.generica ? "Praças de fase · sem cidade definida" : "Sem faixa válida"}</span>
+                        <span style={{fontSize:11,color:T.textSm}}>{g.faixa ? "referência da faixa · por jogo" : g.generica ? "mata-mata: a faixa de cada praça está na coluna Faixa" : "escolha uma faixa para estas praças"}</span>
                         <span style={{fontSize:11,color:T.textSm}}>— {st.pracas} praça{st.pracas===1?"":"s"} · {st.jogos} jogo{st.jogos===1?"":"s"}</span>
                       </span>
                     </td>
@@ -323,8 +331,17 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
                     return (
                       <tr key={p.id} style={{...ts.tr, background: propria ? `${COR_PROPRIA}06` : undefined}}>
                         <td style={{...ts.td, padding:"6px 14px 6px 30px"}}>
-                          <input value={p.cidade} disabled={readOnly} onChange={e=>patchPraca(p.id, {cidade:e.target.value})}
-                            style={{...IS, maxWidth:200, fontSize:12, fontWeight:600, padding:"5px 8px", opacity:readOnly?0.75:1}}/>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
+                            <input value={p.cidade} disabled={readOnly} onChange={e=>patchPraca(p.id, {cidade:e.target.value})}
+                              style={{...IS, maxWidth:200, fontSize:12, fontWeight:600, padding:"5px 8px", opacity:readOnly?0.75:1}}/>
+                            {/* Praça sem cidade (fase do mata-mata): sai do grupo da faixa e vai para "Praças de fase" */}
+                            <button disabled={readOnly} onClick={()=>patchPraca(p.id, {generica: !p.generica})}
+                              title={p.generica ? "Praça sem cidade definida (fase). Clique para tratar como cidade." : "Marcar como praça sem cidade (fase do mata-mata)"}
+                              style={{border:`1px solid ${p.generica ? COR_AJUSTE+"66" : T.border}`,background:p.generica ? COR_AJUSTE+"14" : "transparent",
+                                      color:p.generica ? COR_AJUSTE : T.textSm,borderRadius:6,padding:3,display:"flex",cursor:readOnly?"default":"pointer"}}>
+                              <MapPinOff size={12}/>
+                            </button>
+                          </span>
                         </td>
                         <td style={{...ts.td, padding:"6px 14px"}}>
                           <select value={p.faixaKey} disabled={readOnly} onChange={e=>patchPraca(p.id, {faixaKey:e.target.value})}
