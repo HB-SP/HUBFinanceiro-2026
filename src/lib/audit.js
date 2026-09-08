@@ -46,6 +46,28 @@ export function descreverPagina(pagina, { customCampeonatos = [], orcamentos = [
   return { tipo: "outro", id: pagina, label: pagina };
 }
 
+// Texto legível de um evento do audit_log (usado no Audit log e em Acessos).
+// `nomeDe(userId)` resolve o nome do alvo.
+export function descreverEvento(ev, nomeDe = (id) => id || "—") {
+  const d = ev.details || {};
+  switch (ev.action) {
+    case "login":  { const ua = resumirUserAgent(d.user_agent); return `Entrou no Hub${ua.label && ua.label !== "—" ? ` · ${ua.label}` : ""}${d.ip ? ` · ${d.ip}` : ""}`; }
+    case "logout": return "Saiu do Hub";
+    case "page_view": return `Abriu ${d.label || d.pagina || "uma tela"}${d.tipo === "campeonato" ? " (campeonato)" : d.tipo === "orcamento" ? " (orçamento)" : ""}`;
+    case "user_approved":   return `Aprovou ${nomeDe(ev.target_user_id)} como ${d.new_role || "—"}`;
+    case "role_change":     return `Trocou o papel de ${nomeDe(ev.target_user_id)} para ${d.new_role || "—"}`;
+    case "entidade_change": return `Entidade de ${nomeDe(ev.target_user_id)} → ${d.new_entidade || "nenhuma"}`;
+    case "profile_update":  return `Editou ${d.campo || "perfil"} de ${nomeDe(ev.target_user_id)}${d.valor ? ` → ${d.valor}` : ""}`;
+    case "team_change":     return `Time de ${nomeDe(ev.target_user_id)} → ${d.team || "nenhum"}${d.de ? ` (era ${d.de})` : ""}`;
+    case "user_deleted":    return `Excluiu ${d.nome || d.email || nomeDe(ev.target_user_id)}`;
+    case "user_invited":    return `Convidou ${d.email || "—"}${d.role ? ` como ${d.role}` : ""}`;
+    case "team_created":    return `Criou o time ${d.nome || "—"}${(d.dominios || []).length ? ` (${d.dominios.join(", ")})` : ""}`;
+    case "team_updated":    return `Editou o time ${d.nome || "—"}`;
+    case "team_deleted":    return `Excluiu o time ${d.nome || "—"}`;
+    default: return ev.action;
+  }
+}
+
 // Navegador/SO resumidos a partir do user agent (para a linha do tempo)
 export function resumirUserAgent(ua = "") {
   const s = String(ua);

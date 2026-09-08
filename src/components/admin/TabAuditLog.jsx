@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { AUDIT_ACOES, AUDIT_GRUPOS, resumirUserAgent } from "../../lib/audit";
+import { AUDIT_ACOES, AUDIT_GRUPOS, descreverEvento } from "../../lib/audit";
 import { FONT, RADIUS } from "../../constants";
 import { Button, Badge } from "../ui";
 import { Download, RefreshCw, LogIn, LogOut, Eye, ShieldCheck, Search } from "lucide-react";
@@ -19,26 +19,8 @@ const LIMITE = 1500;
 const fmtDataHora = (d) => { try { return new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch { return d; } };
 const fmtDia = (d) => { try { return new Date(d).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" }); } catch { return d; } };
 
-// Texto da linha a partir de action + details
-function descrever(ev, nomeDe) {
-  const d = ev.details || {};
-  switch (ev.action) {
-    case "login":  { const ua = resumirUserAgent(d.user_agent); return `Entrou no Hub${ua.label && ua.label !== "—" ? ` · ${ua.label}` : ""}${d.ip ? ` · ${d.ip}` : ""}`; }
-    case "logout": return "Saiu do Hub";
-    case "page_view": return `Abriu ${d.label || d.pagina || "uma tela"}${d.tipo === "campeonato" ? " (campeonato)" : d.tipo === "orcamento" ? " (orçamento)" : ""}`;
-    case "user_approved":   return `Aprovou ${nomeDe(ev.target_user_id)} como ${d.new_role || "—"}`;
-    case "role_change":     return `Trocou o papel de ${nomeDe(ev.target_user_id)} para ${d.new_role || "—"}`;
-    case "entidade_change": return `Entidade de ${nomeDe(ev.target_user_id)} → ${d.new_entidade || "nenhuma"}`;
-    case "profile_update":  return `Editou ${d.campo || "perfil"} de ${nomeDe(ev.target_user_id)}${d.valor ? ` → ${d.valor}` : ""}`;
-    case "team_change":     return `Time de ${nomeDe(ev.target_user_id)} → ${d.team || "—"}`;
-    case "user_deleted":    return `Excluiu ${d.nome || d.email || nomeDe(ev.target_user_id)}`;
-    case "user_invited":    return `Convidou ${d.email || "—"}${d.role ? ` como ${d.role}` : ""}`;
-    case "team_created":    return `Criou o time ${d.nome || "—"}${(d.dominios || []).length ? ` (${d.dominios.join(", ")})` : ""}`;
-    case "team_updated":    return `Editou o time ${d.nome || "—"}`;
-    case "team_deleted":    return `Excluiu o time ${d.nome || "—"}`;
-    default: return ev.action;
-  }
-}
+// Texto da linha a partir de action + details (compartilhado com Acessos)
+const descrever = descreverEvento;
 
 export default function TabAuditLog({ T, users = [] }) {
   const [eventos, setEventos] = useState([]);
