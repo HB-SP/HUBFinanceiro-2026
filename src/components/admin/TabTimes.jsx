@@ -87,6 +87,30 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
     load(); onUsersChanged && onUsersChanged();
   };
 
+  // Controles por usuário (lista no fim da aba): time, papel, entidades
+  const setTime = async (u, teamId) => {
+    const t = teams.find(x => x.id === teamId) || null;
+    const { error } = await supabase.from("profiles").update({ team_id: t ? t.id : null }).eq("id", u.id);
+    if (error) { setErro(error.message); return; }
+    await logAcao("team_change", { team_id: t?.id || null, team: t?.nome || null }, u.id);
+    onUsersChanged && onUsersChanged();
+  };
+  const setPapel = async (u, role) => {
+    if (u.role === role) return;
+    const { error } = await supabase.from("profiles").update({ role }).eq("id", u.id);
+    if (error) { setErro(error.message); return; }
+    await logAcao(u.role === "pendente" ? "user_approved" : "role_change", { new_role: role }, u.id);
+    onUsersChanged && onUsersChanged();
+  };
+  const toggleEntidade = async (u, entId) => {
+    const atual = String(u.entidade || "").split(",").map(s => s.trim()).filter(Boolean);
+    const novas = atual.includes(entId) ? atual.filter(e => e !== entId) : [...atual, entId];
+    const entidade = novas.join(",") || null;
+    const { error } = await supabase.from("profiles").update({ entidade }).eq("id", u.id);
+    if (error) { setErro(error.message); return; }
+    await logAcao("entidade_change", { new_entidade: entidade }, u.id);
+    onUsersChanged && onUsersChanged();
+  };
   const desvincular = async (u, t) => {
     if (!window.confirm(`Tirar ${u.nome || u.email} do time ${t.nome}? O perfil e a entidade individual não mudam.`)) return;
     const { error } = await supabase.from("profiles").update({ team_id: null }).eq("id", u.id);
@@ -218,23 +242,86 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
         </div>
       )}
 
-      {/* Sem time */}
-      {semTime.length > 0 && (
-        <div style={{ background: T.surface || T.card, border: `1px solid ${T.border}`, borderRadius: RADIUS.lg, padding: "14px 18px" }}>
-          {label(`Sem time (${semTime.length})`)}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {semTime.map(u => (
-              <span key={u.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: T.textMd, border: `1px solid ${T.border}`, borderRadius: 999, padding: "3px 10px" }}>
-                {u.email}
-                <select value="" onChange={e => { const t = teams.find(x => x.id === e.target.value); if (t) vincular(u, t); }} style={{ ...IS, padding: "2px 6px", fontSize: 11 }}>
-                  <option value="">vincular…</option>
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                </select>
-              </span>
-            ))}
+      {/* ── Usuários: lista completa com os controles de cada um (time · papel · entidades) ── */}
+      {(() => {
+        const ROLE_COR = { admin: "#16A34A", visualizador: "#2563EB", fornecedor: "#D97706", pendente: "#9333EA" };
+        const ordem = [...users].sort((a, b) =>
+          ((a.role === "pendente") === (b.role === "pendente") ? 0 : a.role === "pendente" ? -1 : 1)
+          || ((a.team_id ? 1 : 0) - (b.team_id ? 1 : 0))
+          || (teams.findIndex(t => t.id === a.team_id) - teams.findIndex(t => t.id === b.team_id))
+          || (a.nome || a.email || "").localeCompare(b.nome || b.email || "", "pt-BR"));
+        const th = { padding: "10px 14px", textAlign: "left", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T.textSm, borderBottom: `1px solid ${T.border}`, whiteSpace: "nowrap" };
+        const td = { padding: "9px 14px", borderTop: `1px solid ${T.border}`, fontSize: 12.5, color: T.text, verticalAlign: "middle" };
+        return (
+          <div style={{ background: T.surface || T.card, border: `1px solid ${T.border}`, borderRadius: RADIUS.lg, overflow: "hidden", boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <Users size={16} color={T.brand || "#65B32E"}/>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Usuários ({users.length})</span>
+              <span style={{ fontSize: 11.5, color: T.textSm }}>Decida aqui o time, o papel e as entidades de cada um. Pendentes primeiro, depois quem está sem time.</span>
+              {semTime.length > 0 && <span style={{ marginLeft: "auto" }}><Badge T={T} color="#D97706" size="sm">{semTime.length} sem time</Badge></span>}
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+                <thead>
+                  <tr style={{ background: T.surfaceAlt || T.bg }}>
+                    <th style={th}>Usuário</th>
+                    <th style={th}>Time</th>
+                    <th style={th}>Papel</th>
+                    <th style={th}>Entidades (individual)</th>
+                    <th style={th}>Efetivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ordem.map(u => {
+                    const t = teams.find(x => x.id === u.team_id) || null;
+                    const ents = String(u.entidade || "").split(",").map(s => s.trim()).filter(Boolean);
+                    const efetivas = ents.length ? ents : (t?.entidades || []);
+                    const pend = u.role === "pendente";
+                    return (
+                      <tr key={u.id} style={{ background: pend ? "rgba(147,51,234,0.05)" : undefined }}>
+                        <td style={td}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: ROLE_COR[u.role] || "#6B7280", flexShrink: 0 }}/>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{u.nome || <span style={{ color: T.textSm, fontStyle: "italic" }}>sem nome</span>}</div>
+                              <div style={{ fontSize: 11, color: T.textSm, whiteSpace: "nowrap" }}>{u.email}{u.funcao ? ` · ${u.funcao}` : ""}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={td}>
+                          <select value={u.team_id || ""} onChange={e => setTime(u, e.target.value)}
+                            style={{ ...IS, padding: "5px 8px", fontSize: 12, minWidth: 130, borderColor: u.team_id ? undefined : "#D9770688", color: t ? T.text : "#D97706" }}>
+                            <option value="">— sem time —</option>
+                            {teams.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                          </select>
+                        </td>
+                        <td style={td}>
+                          <select value={u.role} onChange={e => setPapel(u, e.target.value)}
+                            style={{ ...IS, padding: "5px 8px", fontSize: 12, minWidth: 130, color: ROLE_COR[u.role] || T.text, fontWeight: 600, borderColor: pend ? "#9333EA88" : undefined }}>
+                            {pend && <option value="pendente">Pendente — aprovar como…</option>}
+                            <option value="visualizador">Visualizador</option>
+                            <option value="admin">Admin</option>
+                            <option value="fornecedor">Fornecedor</option>
+                          </select>
+                        </td>
+                        <td style={td}>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {ENTIDADES_VISUALIZADOR.map(e => <Toggle key={e.id} cor="#2563EB" on={ents.includes(e.id)} onClick={() => toggleEntidade(u, e.id)}>{e.label.split(" - ")[0]}</Toggle>)}
+                          </div>
+                        </td>
+                        <td style={{ ...td, fontSize: 11.5, color: T.textMd, whiteSpace: "nowrap" }}>
+                          {u.role === "admin" ? "tudo" : efetivas.length ? efetivas.map(entLabel).join(", ") : <span style={{ color: T.textSm }}>—</span>}
+                          <div style={{ fontSize: 10.5, color: T.textSm }}>{ents.length ? "do perfil" : t ? `herdado de ${t.nome}` : "sem time"}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Modal de edição */}
       {editando && (
