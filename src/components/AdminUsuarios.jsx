@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { logAcao } from "../lib/audit";
 import LivemodeLogo from "./LivemodeLogo";
 import { IconButton } from "./ui";
 import { ArrowLeft, Sun, Moon, LogOut, Users, Plus, Trash2, Mail, UsersRound, ScrollText, ShieldCheck } from "lucide-react";
@@ -9,7 +10,7 @@ import TabAuditLog from "./admin/TabAuditLog";
 
 // Abas da Administração do Portal (fase 1: Usuários · Times · Audit log)
 const ABAS_ADMIN = [
-  { key: "usuarios", label: "Usuários",  icon: Users },
+  { key: "usuarios", label: "Convites & pendentes", icon: Users },
   { key: "times",    label: "Times",     icon: UsersRound },
   { key: "audit",    label: "Audit log", icon: ScrollText },
 ];
@@ -126,6 +127,7 @@ function InviteModal({ T, onClose, onSuccess }) {
         setLoading(false);
         return;
       }
+      await logAcao("user_invited", { email, nome, role });
       onSuccess();
       onClose();
     } catch (err) {
@@ -307,6 +309,13 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
   const [entUpdating, setEntUpdating]   = useState({});
   const [approving, setApproving]   = useState(null);
   const [aba, setAba]               = useState("usuarios");
+  const [teamsRef, setTeamsRef]     = useState([]);   // só para mostrar o time na lista (controles ficam na aba Times)
+  useEffect(() => {
+    const load = () => supabase.from('teams').select('id, nome, cor').order('created_at').then(({ data }) => setTeamsRef(data || []));
+    load();
+    const ch = supabase.channel('admin-teams-ref').on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, load).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -478,22 +487,6 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
             </div>
           </div>
 
-          <button
-            onClick={() => setShowInvite(true)}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 8,
-              background: T.brand || "#65B32E", color: "#fff",
-              border: "none", borderRadius: 8,
-              padding: "10px 18px", fontSize: 13, fontWeight: 500,
-              cursor: "pointer", fontFamily: "'Poppins',sans-serif",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = T.brandStrong || "#5aa327"}
-            onMouseLeave={e => e.currentTarget.style.background = T.brand || "#65B32E"}
-          >
-            <Plus size={15} strokeWidth={2.25}/>
-            Convidar usuário
-          </button>
         </div>
 
         {/* Abas da administração */}
@@ -518,181 +511,99 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
           {aba === "times" && <TabTimes T={T} users={users} onUsersChanged={loadUsers}/>}
           {aba === "audit" && <TabAuditLog T={T} users={users}/>}
           {aba === "usuarios" && (<>
-          {/* Stats */}
-          <div style={{ display: "flex", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
+          {/* ── Convites ── */}
+          <div style={{ background: T.surface || T.card, border: `1px solid ${T.border}`, borderRadius: RADIUS.lg, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <span style={{ width: 38, height: 38, borderRadius: 10, background: "rgba(8,145,178,0.12)", color: "#0891B2", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Mail size={18} strokeWidth={2.25}/></span>
+            <div style={{ flex: 1, minWidth: 240 }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: T.text }}>Convites</p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: T.textMd, lineHeight: 1.5 }}>
+                O convidado recebe um e-mail para criar a senha. Se o domínio casar com um time com aprovação automática, entra direto; senão aparece em Pendentes.
+                Time, papel e entidades de cada um são decididos na aba <b>Times</b>.
+              </p>
+            </div>
+            <button onClick={() => setShowInvite(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: T.brand || "#65B32E", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Poppins',sans-serif" }}>
+              <Plus size={15} strokeWidth={2.25}/> Convidar por e-mail
+            </button>
+          </div>
+
+          {/* ── Pendentes ── */}
+          <div style={{ background: T.surface || T.card, border: `1px solid ${pendCount ? "rgba(147,51,234,0.35)" : T.border}`, borderRadius: RADIUS.lg, marginBottom: 18, overflow: "hidden", boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)" }}>
+            <div style={{ padding: "14px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 16 }}>⏳</span>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: pendCount ? "#9333EA" : T.text }}>
+                Pendentes de aprovação {pendCount > 0 && <span style={{ background: "#9333EA", color: "#fff", borderRadius: 999, fontSize: 10, padding: "1px 8px", marginLeft: 6 }}>{pendCount}</span>}
+              </p>
+            </div>
+            {pendCount === 0 ? (
+              <p style={{ margin: 0, padding: "14px 20px", fontSize: 12.5, color: T.textSm }}>Nenhum cadastro aguardando aprovação.</p>
+            ) : (
+              <div>
+                {sortedUsers.filter(u => u.role === 'pendente').map(u => (
+                  <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 20px", borderTop: `1px solid ${T.border}`, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 220 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{u.nome || <span style={{ color: T.textSm, fontStyle: "italic" }}>sem nome</span>}</div>
+                      <div style={{ fontSize: 11.5, color: T.textSm }}>{u.email}{u.funcao ? ` · ${u.funcao}` : ""}{u.entidade ? ` · pediu: ${parseEntidades(u.entidade).map(entidadeNome).join(", ")}` : ""} · cadastro em {fmtDate(u.created_at)}</div>
+                    </div>
+                    <button onClick={() => setApproving(u)} style={{ background: "rgba(147,51,234,0.1)", border: "1px solid rgba(147,51,234,0.3)", color: "#9333EA", borderRadius: 7, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Poppins',sans-serif" }}>Revisar e aprovar ▸</button>
+                    <button onClick={() => handleDelete(u)} title="Recusar e excluir" style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", color: T.danger || "#DC2626", borderRadius: 7, width: 32, height: 32, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><Trash2 size={14}/></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Todos os usuários (lista simples; controles ficam na aba Times) ── */}
+          <div style={{ display: "flex", gap: 14, marginBottom: 18, flexWrap: "wrap" }}>
             <StatCard label="Total" value={total} color={T.text} T={T}/>
             <StatCard label="Admins" value={adminCount} color="#16A34A" T={T}/>
             <StatCard label="Visualizadores" value={vizCount} color="#2563EB" T={T}/>
             <StatCard label="Fornecedores" value={fornCount} color="#D97706" T={T}/>
-            <StatCard label="Pendentes" value={pendCount} color="#9333EA" T={T}/>
           </div>
-
-          {/* Alerta de pendentes */}
-          {pendCount > 0 && (
-            <div style={{ background:"rgba(147,51,234,0.08)", border:"1px solid rgba(147,51,234,0.25)", borderRadius:10, padding:"12px 16px", marginBottom:20, display:"flex", alignItems:"center", gap:10 }}>
-              <span style={{ fontSize:16 }}>⏳</span>
-              <p style={{ margin:0, fontSize:13, color:"#9333EA", fontWeight:500, fontFamily:"'Poppins',sans-serif" }}>
-                {pendCount} usuário{pendCount > 1 ? 's' : ''} aguardando aprovação — altere o perfil na tabela abaixo para liberar o acesso.
-              </p>
-            </div>
-          )}
-
-          {/* Table */}
-          <div style={{
-            background: T.surface || T.card,
-            border: `1px solid ${T.border}`,
-            borderRadius: RADIUS.lg,
-            overflow: "hidden",
-            boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)",
-          }}>
+          <div style={{ background: T.surface || T.card, border: `1px solid ${T.border}`, borderRadius: RADIUS.lg, overflow: "hidden", boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)" }}>
             {loading ? (
-              <div style={{ padding: 48, textAlign: "center" }}>
-                <p style={{ color: T.textMd, fontSize: 13 }}>Carregando usuários...</p>
-              </div>
-            ) : users.length === 0 ? (
-              <div style={{ padding: 48, textAlign: "center" }}>
-                <Users size={32} color={T.textSm} strokeWidth={1.5} style={{ marginBottom: 12 }}/>
-                <p style={{ color: T.textMd, fontSize: 13, margin: 0 }}>Nenhum usuário encontrado</p>
-              </div>
+              <div style={{ padding: 48, textAlign: "center" }}><p style={{ color: T.textMd, fontSize: 13 }}>Carregando usuários...</p></div>
             ) : (
               <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 600 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
                   <thead>
                     <tr style={{ background: T.surfaceAlt || T.bg }}>
                       <th style={thStyle}>Nome</th>
                       <th style={thStyle}>Função</th>
                       <th style={thStyle}>E-mail</th>
-                      <th style={thStyle}>Entidade</th>
-                      <th style={thStyle}>Perfil</th>
+                      <th style={thStyle}>Time</th>
+                      <th style={thStyle}>Papel</th>
                       <th style={thStyle}>Criado em</th>
-                      <th style={{ ...thStyle, textAlign: "center" }}>Ações</th>
+                      <th style={{ ...thStyle, textAlign: "center" }}>Excluir</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedUsers.map(u => {
+                    {sortedUsers.filter(u => u.role !== 'pendente').map(u => {
                       const isMe = u.id === currentUser?.id;
-                      const isPending = u.role === 'pendente';
+                      const t = teamsRef.find(x => x.id === u.team_id) || null;
                       return (
-                        <tr key={u.id} style={{ background: isPending ? "rgba(147,51,234,0.04)" : isMe ? (T.brandSoft || "rgba(101,179,46,0.04)") : "transparent" }}>
+                        <tr key={u.id} style={{ background: isMe ? (T.brandSoft || "rgba(101,179,46,0.04)") : "transparent" }}>
                           <td style={tdStyle}>
                             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <div style={{
-                                width: 30, height: 30, borderRadius: "50%",
-                                background: T.surfaceAlt || T.bg,
-                                border: `1px solid ${T.border}`,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 12, fontWeight: 600, color: T.textMd,
-                                flexShrink: 0,
-                              }}>
+                              <div style={{ width: 30, height: 30, borderRadius: "50%", background: T.surfaceAlt || T.bg, border: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: T.textMd, flexShrink: 0 }}>
                                 {(u.nome || u.email || "?").charAt(0).toUpperCase()}
                               </div>
-                              <InlineEditText
-                                value={u.nome}
-                                onSave={v => handleCampoChange(u.id, 'nome', v)}
-                                T={T}
-                                textStyle={{ fontWeight: isMe ? 600 : 400, fontSize: 13, color: T.text }}
-                              />
-                              {isMe && (
-                                <span style={{
-                                  fontSize: 10, color: T.textSm, fontWeight: 500,
-                                  background: T.surfaceAlt || T.bg,
-                                  border: `1px solid ${T.border}`,
-                                  borderRadius: RADIUS.pill,
-                                  padding: "0 7px", height: 18,
-                                  display: "inline-flex", alignItems: "center",
-                                  fontFamily: FONT.ui, letterSpacing: "0.04em",
-                                }}>você</span>
-                              )}
+                              <InlineEditText value={u.nome} onSave={v => handleCampoChange(u.id, 'nome', v)} T={T} textStyle={{ fontWeight: isMe ? 600 : 400, fontSize: 13, color: T.text }}/>
+                              {isMe && <span style={{ fontSize: 10, color: T.textSm, fontWeight: 500, background: T.surfaceAlt || T.bg, border: `1px solid ${T.border}`, borderRadius: RADIUS.pill, padding: "0 7px", height: 18, display: "inline-flex", alignItems: "center", fontFamily: FONT.ui, letterSpacing: "0.04em" }}>você</span>}
                             </div>
                           </td>
                           <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>
-                            <InlineEditText
-                              value={u.funcao}
-                              onSave={v => handleCampoChange(u.id, 'funcao', v)}
-                              T={T}
-                              textStyle={{ fontSize: 12, color: T.textMd }}
-                            />
+                            <InlineEditText value={u.funcao} onSave={v => handleCampoChange(u.id, 'funcao', v)} T={T} textStyle={{ fontSize: 12, color: T.textMd }}/>
                           </td>
-                          <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>
-                            {u.email || "—"}
+                          <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>{u.email || "—"}</td>
+                          <td style={{ ...tdStyle, fontSize: 12 }}>
+                            {t ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: T.text }}><span style={{ width: 8, height: 8, borderRadius: 2, background: t.cor || "#65B32E" }}/>{t.nome}</span>
+                               : <button onClick={() => setAba("times")} style={{ border: "1px dashed #D9770688", background: "transparent", color: "#D97706", borderRadius: 6, padding: "2px 8px", fontSize: 11, cursor: "pointer", fontFamily: FONT.ui }}>sem time · definir</button>}
                           </td>
-                          <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>
-                            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                              {ENTIDADE_OPTS.map(opt => {
-                                const ativa = parseEntidades(u.entidade).includes(opt.id);
-                                return (
-                                  <button
-                                    key={opt.id}
-                                    disabled={!!entUpdating[u.id]}
-                                    onClick={() => handleToggleEntidade(u, opt.id)}
-                                    title={ativa ? `Remover acesso: ${entidadeNome(opt.id)}` : `Liberar acesso: ${entidadeNome(opt.id)}`}
-                                    style={{
-                                      background: ativa ? (T.brandSoft || "rgba(101,179,46,0.10)") : (T.surfaceAlt || T.bg),
-                                      border: `1px solid ${ativa ? (T.brand || "#65B32E") : T.border}`,
-                                      color: ativa ? (T.brand || "#65B32E") : T.textSm,
-                                      borderRadius: 6, padding: "2px 8px", fontSize: 11,
-                                      fontWeight: ativa ? 600 : 400,
-                                      cursor: "pointer", fontFamily: "'Poppins',sans-serif",
-                                      opacity: entUpdating[u.id] ? 0.5 : 1,
-                                    }}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                          <td style={tdStyle}>
-                            {isMe ? (
-                              <RoleBadge role={u.role}/>
-                            ) : isPending ? (
-                              <button onClick={() => setApproving(u)} style={{
-                                background:"rgba(147,51,234,0.1)", border:"1px solid rgba(147,51,234,0.3)",
-                                color:"#9333EA", borderRadius:7, padding:"5px 12px",
-                                fontSize:12, fontWeight:500, cursor:"pointer", fontFamily:"'Poppins',sans-serif",
-                              }}>Revisar ▸</button>
-                            ) : (
-                              <select
-                                value={u.role || "visualizador"}
-                                disabled={!!roleUpdating[u.id]}
-                                onChange={e => handleRoleChange(u.id, e.target.value)}
-                                style={{
-                                  background: T.surfaceAlt || T.bg,
-                                  border: `1px solid ${T.border}`,
-                                  borderRadius: 7, padding: "5px 10px",
-                                  fontSize: 12, color: T.text,
-                                  fontFamily: "'Poppins',sans-serif",
-                                  cursor: "pointer", outline: "none",
-                                  opacity: roleUpdating[u.id] ? 0.5 : 1,
-                                }}
-                              >
-                                <option value="pendente">Pendente</option>
-                                <option value="admin">Admin</option>
-                                <option value="visualizador">Visualizador</option>
-                                <option value="fornecedor">Fornecedor</option>
-                              </select>
-                            )}
-                          </td>
-                          <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>
-                            {fmtDate(u.created_at)}
-                          </td>
+                          <td style={tdStyle}><RoleBadge role={u.role}/></td>
+                          <td style={{ ...tdStyle, color: T.textMd, fontSize: 12 }}>{fmtDate(u.created_at)}</td>
                           <td style={{ ...tdStyle, textAlign: "center" }}>
                             {!isMe && (
-                              <button
-                                onClick={() => handleDelete(u)}
-                                title="Excluir usuário"
-                                style={{
-                                  background: "rgba(220,38,38,0.08)",
-                                  border: "1px solid rgba(220,38,38,0.2)",
-                                  color: T.danger || "#DC2626",
-                                  borderRadius: 7, width: 32, height: 32,
-                                  cursor: "pointer",
-                                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                                  transition: "background 0.15s",
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = "rgba(220,38,38,0.16)"}
-                                onMouseLeave={e => e.currentTarget.style.background = "rgba(220,38,38,0.08)"}
-                              >
+                              <button onClick={() => handleDelete(u)} title="Excluir usuário" style={{ background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)", color: T.danger || "#DC2626", borderRadius: 7, width: 32, height: 32, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                                 <Trash2 size={14} strokeWidth={2.25}/>
                               </button>
                             )}
