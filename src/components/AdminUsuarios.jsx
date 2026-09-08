@@ -2,8 +2,17 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import LivemodeLogo from "./LivemodeLogo";
 import { IconButton } from "./ui";
-import { ArrowLeft, Sun, Moon, LogOut, Users, Plus, Trash2, Mail } from "lucide-react";
+import { ArrowLeft, Sun, Moon, LogOut, Users, Plus, Trash2, Mail, UsersRound, ScrollText, ShieldCheck } from "lucide-react";
 import { FONT, RADIUS } from "../constants";
+import TabTimes from "./admin/TabTimes";
+import TabAuditLog from "./admin/TabAuditLog";
+
+// Abas da Administração do Portal (fase 1: Usuários · Times · Audit log)
+const ABAS_ADMIN = [
+  { key: "usuarios", label: "Usuários",  icon: Users },
+  { key: "times",    label: "Times",     icon: UsersRound },
+  { key: "audit",    label: "Audit log", icon: ScrollText },
+];
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────
 const ROLE_META = {
@@ -297,6 +306,7 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
   const [roleUpdating, setRoleUpdating] = useState({});
   const [entUpdating, setEntUpdating]   = useState({});
   const [approving, setApproving]   = useState(null);
+  const [aba, setAba]               = useState("usuarios");
 
   const loadUsers = async () => {
     setLoading(true);
@@ -464,7 +474,7 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
               <h1 style={{
                 fontFamily: FONT.display, fontSize: 22, fontWeight: 700,
                 margin: 0, color: T.text, letterSpacing: "-0.005em", lineHeight: 1.1,
-              }}>Gerenciamento de Usuários</h1>
+              }}>Administração do Portal</h1>
             </div>
           </div>
 
@@ -486,7 +496,28 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
           </button>
         </div>
 
+        {/* Abas da administração */}
+        <div style={{ background: T.surface || T.card, borderBottom: `1px solid ${T.border}`, padding: "0 32px", display: "flex", gap: 4 }}>
+          {ABAS_ADMIN.map(({ key, label, icon: Icon }) => {
+            const on = aba === key;
+            return (
+              <button key={key} onClick={() => setAba(key)} style={{
+                display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 16px",
+                border: "none", borderBottom: `2px solid ${on ? (T.brand || "#65B32E") : "transparent"}`,
+                background: "transparent", cursor: "pointer", fontFamily: FONT.ui,
+                fontSize: 12.5, fontWeight: 600, color: on ? (T.brand || "#65B32E") : T.textMd,
+              }}>
+                <Icon size={14} strokeWidth={2.25}/>{label}
+                {key === "usuarios" && pendCount > 0 && <span style={{ background: "#9333EA", color: "#fff", borderRadius: 999, fontSize: 10, padding: "0 7px", height: 18, display: "inline-flex", alignItems: "center", fontWeight: 700 }}>{pendCount}</span>}
+              </button>
+            );
+          })}
+        </div>
+
         <div style={{ padding: "28px 32px" }}>
+          {aba === "times" && <TabTimes T={T} users={users} onUsersChanged={loadUsers}/>}
+          {aba === "audit" && <TabAuditLog T={T} users={users}/>}
+          {aba === "usuarios" && (<>
           {/* Stats */}
           <div style={{ display: "flex", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
             <StatCard label="Total" value={total} color={T.text} T={T}/>
@@ -674,6 +705,7 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
               </div>
             )}
           </div>
+          </>)}
         </div>
       </div>
 

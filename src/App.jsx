@@ -998,6 +998,18 @@ import { NovoCampeonatoModal } from "./components/modals/NovoCampeonatoModal";
 import { REGISTRY_KEY } from "./data/customCampeonato";
 import { ENTIDADES_VISUALIZADOR, podeVerCampeonato } from "./config/entities";
 import { ORC_REGISTRY_KEY, podeVerOrcamento } from "./data/orcamentos";
+import { logAcao, descreverPagina } from "./lib/audit";
+
+// Perfil + time: a entidade individual do perfil vence; sem ela, vale a do
+// time (teams.entidades). Módulos transversais liberados ao visualizador vêm
+// do time (teams.modulos); sem time, só Orçamentos.
+const PERFIL_SELECT = 'role, entidade, team_id, teams ( nome, entidades, modulos )';
+const perfilEfetivo = (data) => {
+  const team = data?.teams || null;
+  const entidade = data?.entidade || (team?.entidades?.length ? team.entidades.join(',') : null);
+  const modulos = team ? (team.modulos || []) : ['orcamentos'];
+  return { role: data?.role ?? 'visualizador', entidade, modulos, teamNome: team?.nome || null };
+};
 import { getState as getStateSb, setState as setStateSb } from "./lib/supabase";
 
 function PendentePage({ T, onSignOut }) {
@@ -1065,6 +1077,7 @@ export default function App() {
   const [user,        setUser]        = useState(null);
   const [role,        setRole]        = useState(null);
   const [entidade,    setEntidade]    = useState(null);
+  const [modulos,     setModulos]     = useState(['orcamentos']);   // módulos liberados ao visualizador (do time)
   const [authLoading, setAuthLoading] = useState(true);
   const [customCampeonatos, setCustomCampeonatos] = useState([]);
   const [orcamentos, setOrcamentos] = useState([]);   // espelho do orc_registry p/ a Home
@@ -1082,13 +1095,13 @@ export default function App() {
     const loadRole = (userId) => {
       // Timeout: se o backend não responder (projeto pausado/outage), mostra a
       // tela de erro com "Tentar novamente" em vez de "Carregando..." eterno.
-      const query = supabase.from('profiles').select('role, entidade').eq('id', userId).single();
+      const query = supabase.from('profiles').select(PERFIL_SELECT).eq('id', userId).single();
       const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 20000));
       Promise.race([query, timeout])
         .then(({ data }) => {
           if (mounted) {
-            setRole(data?.role ?? 'visualizador');
-            setEntidade(data?.entidade ?? null);
+            const p = perfilEfetivo(data);
+            setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos);
           }
         })
         .catch(err => {
@@ -1127,8 +1140,20 @@ export default function App() {
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
-  const signOut = async () => { await supabase.auth.signOut(); };
+  const signOut = async () => { await logAcao('logout'); await supabase.auth.signOut(); };
   useSessionTimeout(signOut, !!user);
+
+  // Audit log de navegação: registra a tela aberta (campeonato, orçamento,
+  // módulo, admin). A mesma tela não repete em menos de 60s; a Home não conta.
+  const ultimaTelaRef = useRef({ pagina: null, at: 0 });
+  useEffect(() => {
+    if (!user || !pagina || pagina === 'home') return;
+    const agora = Date.now();
+    if (ultimaTelaRef.current.pagina === pagina && agora - ultimaTelaRef.current.at < 60000) return;
+    ultimaTelaRef.current = { pagina, at: agora };
+    const d = descreverPagina(pagina, { customCampeonatos, orcamentos });
+    logAcao('page_view', { pagina, tipo: d.tipo, id: d.id || null, label: d.label });
+  }, [pagina, user?.id]);
 
   useEffect(() => {
     const onHash = () => setCurrentHash(window.location.hash);
@@ -1149,9 +1174,11 @@ export default function App() {
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
-        (payload) => {
-          setRole(payload.new?.role ?? 'visualizador');
-          setEntidade(payload.new?.entidade ?? null);
+        () => {
+          // Refaz a leitura com o time (o payload do realtime não traz o join)
+          supabase.from('profiles').select(PERFIL_SELECT).eq('id', user.id).single()
+            .then(({ data }) => { const p = perfilEfetivo(data); setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos); })
+            .catch(() => {});
         }
       )
       .subscribe();
@@ -1264,7 +1291,12 @@ export default function App() {
 
   // Visualizador não acessa o Hub de Fornecedores; Orçamentos ele acessa
   // filtrado pela entidade (só-leitura), como nos campeonatos.
-  const paginaEfetiva = (effectiveRole === 'visualizador' && pagina === 'hub-fornecedores') ? 'home' : pagina;
+  // Módulos do time (teams.modulos) decidem o que o visualizador abre.
+  const moduloLiberado = (m) => effectiveRole !== 'visualizador' || (modulos || []).includes(m);
+  const paginaEfetiva =
+    (pagina === 'hub-fornecedores' && !moduloLiberado('fornecedores')) ? 'home'
+    : ((pagina === 'hub-orcamentos' || pagina?.startsWith('orc:')) && !moduloLiberado('orcamentos')) ? 'home'
+    : pagina;
 
   // Bloqueio por entidade para visualizador (aceita múltiplas separadas por vírgula)
   const podeVerCamp = (campId, organizador = null) =>

@@ -381,7 +381,7 @@ export default function Home({ onEnter, onOpenHub, T, darkMode, setDarkMode, cus
           </Badge>
           {role === 'admin' && (
             <Button T={T} variant="secondary" size="sm" icon={Users} onClick={() => onEnter('admin-usuarios')}>
-              Usuários
+              Administração
             </Button>
           )}
           <Button
