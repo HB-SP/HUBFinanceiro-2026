@@ -1,428 +1,222 @@
 import { useMemo, useState } from "react";
-import { FONT, CATS } from "../../constants";
+import { FONT } from "../../constants";
 import { Card, SectionHeader, Button, Progress, Badge } from "../ui";
-import { calcTotais, calcOrcadoJogo, diffBaseline, ORC_STATUS, GRUPOS_PREMISSA } from "../../data/orcamentos";
+import {
+  calcTotais, calcOrcadoJogo, diffBaseline, ORC_STATUS,
+  MACRO_GRUPOS_VARIAVEIS, MACRO_OUTROS,
+} from "../../data/orcamentos";
 import { fmt, fmtK } from "../../utils";
 import {
-  LineChart, Wallet, CalendarDays, Briefcase, Trophy, AlertCircle,
-  LayoutDashboard, LayoutGrid, Users, ChevronRight, ChevronDown, ChevronUp,
-  GitCompareArrows, Layers, TrendingUp, TrendingDown,
+  Wallet, CalendarDays, Briefcase, Trophy, AlertCircle,
+  ChevronRight, GitCompareArrows, TrendingUp, TrendingDown,
 } from "lucide-react";
 
 const COR_VAR  = "#2563EB"; // custos variáveis (por jogo)
 const COR_FIXO = "#a855f7"; // custos fixos (por edição)
 
 const thStyle = (T, left) => ({
-  padding:"11px 16px",
-  textAlign:left ? "left" : "right",
-  color:T.textSm,
-  fontSize:10,
-  fontWeight:700,
-  letterSpacing:"0.06em",
-  textTransform:"uppercase",
-  whiteSpace:"nowrap",
-  borderBottom:`1px solid ${T.border}`,
+  padding:"11px 16px", textAlign:left ? "left" : "right", color:T.textSm, fontSize:10, fontWeight:700,
+  letterSpacing:"0.06em", textTransform:"uppercase", whiteSpace:"nowrap", borderBottom:`1px solid ${T.border}`,
 });
-const tdNum = (T, extra = {}) => ({ padding:"10px 16px", textAlign:"right", whiteSpace:"nowrap", color:T.text, fontSize:12.5, fontFamily:FONT.num, fontVariantNumeric:"tabular-nums", ...extra });
+const tdNum = (T, extra = {}) => ({ padding:"12px 16px", textAlign:"right", whiteSpace:"nowrap", color:T.text, fontSize:13, fontFamily:FONT.num, fontVariantNumeric:"tabular-nums", ...extra });
 const pctOf = (v, tot) => tot > 0 ? `${((v / tot) * 100).toFixed(1)}%` : "—";
 const deltaCor = (d, T) => d > 0 ? "#DC2626" : d < 0 ? "#16A34A" : T.textSm;
 const fmtDelta = (d) => d === 0 ? "—" : `${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}`;
 
-// Card de bloco (Variáveis / Fixos / Total): número grande + duas linhas de apoio.
-const BlocoCard = ({ T, cor, icon: Icon, titulo, valor, linha1, linha2, rodape }) => (
-  <Card T={T} accent={cor}>
-    <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:8}}>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{width:30,height:30,borderRadius:8,background:`${cor}16`,color:cor,display:"inline-flex",alignItems:"center",justifyContent:"center"}}><Icon size={15} strokeWidth={2.25}/></span>
-        <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:cor}}>{titulo}</span>
-      </div>
-      <div className="num" style={{fontSize:26,fontWeight:700,color:T.text,fontFamily:FONT.num,letterSpacing:"-0.01em",lineHeight:1.1}}>{valor}</div>
-      {linha1 && <div style={{fontSize:12,color:T.textMd}}>{linha1}</div>}
-      {linha2 && <div style={{fontSize:11.5,color:T.textSm}}>{linha2}</div>}
-      {rodape}
-    </div>
-  </Card>
-);
-
-// Resumo consolidado — é a peça que a entidade pagadora lê. Ordem de leitura:
-// blocos variável × fixo × total (com delta vs edição anterior) → matriz
-// padrão × faixa (o que se aprova) → por fase → por categoria/serviço →
-// por mandante (retrátil) → status/aprovação.
+// ─── RESUMO MACRO ─────────────────────────────────────────────────────────────
+// Dois blocos — CUSTOS VARIÁVEIS (por jogo) e CUSTOS FIXOS (por edição) — cada
+// um com seus macro grupos (variáveis: blocos da planilha; fixos: as seções do
+// próprio orçamento). Clique no macro grupo abre as linhas. Se houver base
+// (edição anterior), cada macro grupo mostra a base e a variação.
 export default function SubResumo({ orc, readOnly, T, canAprovar, errosAprovacao = [], onAprovar }) {
   const totais = calcTotais(orc);
   const jogos = orc.jogos || [];
-  const pracas = orc.pracas || [];
-  const faixas = orc.faixas || [];
-  const padroes = orc.padroes || [];
-  const fases = orc.meta.formato === "pontos_corridos" ? [] : (orc.meta.fases || []);
   const numJogos = jogos.length;
   const st = ORC_STATUS[orc.meta.status] || ORC_STATUS.rascunho;
   const totalGeral = totais.totalGeral || 0;
-  const [abertas, setAbertas] = useState(() => new Set());
-  const [mandantesAberto, setMandantesAberto] = useState(false);
+  const [abertos, setAbertos] = useState(() => new Set());
+  const toggle = key => setAbertos(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  const faseLabel = (key) => fases.find(f => f.key === key)?.label || key || "—";
-  const rankFase = (key) => { const i = fases.findIndex(f => f.key === key); return i === -1 ? 999 : i; };
-  const pracaDe = (j) => pracas.find(p => p.id === j.pracaId) || null;
-  const faixaDe = (j) => faixas.find(f => f.key === pracaDe(j)?.faixaKey) || null;
-
-  // Orçado de cada jogo (uma vez) — alimenta todas as quebras abaixo.
-  const jogosCalc = useMemo(() => jogos.map(j => {
-    const orcado = calcOrcadoJogo(orc, j);
-    const total = Object.values(orcado).reduce((s, v) => s + (v || 0), 0);
-    return { j, orcado, total, faixa: faixaDe(j), praca: pracaDe(j) };
-  }), [orc]);
-
-  // ── 2. Matriz padrão × faixa: nº de jogos, média por jogo e total por célula ──
-  const matriz = useMemo(() => {
-    const cel = {}; // `${padrao}|${faixaKey}` → { n, total }
-    const porPadrao = {}, porFaixa = {};
-    jogosCalc.forEach(({ j, total, faixa }) => {
-      const fk = faixa?.key || "__sem";
-      const k = `${j.padrao || "—"}|${fk}`;
-      cel[k] = cel[k] || { n:0, total:0 }; cel[k].n++; cel[k].total += total;
-      porPadrao[j.padrao || "—"] = porPadrao[j.padrao || "—"] || { n:0, total:0 }; porPadrao[j.padrao || "—"].n++; porPadrao[j.padrao || "—"].total += total;
-      porFaixa[fk] = porFaixa[fk] || { n:0, total:0 }; porFaixa[fk].n++; porFaixa[fk].total += total;
-    });
-    const linhas = [...padroes, ...Object.keys(porPadrao).filter(p => !padroes.includes(p))].filter(p => porPadrao[p]);
-    const colunas = [...faixas.map(f => ({ key:f.key, label:f.label })), ...(porFaixa.__sem ? [{ key:"__sem", label:"Sem faixa" }] : [])].filter(c => porFaixa[c.key]);
-    return { cel, porPadrao, porFaixa, linhas, colunas };
-  }, [jogosCalc, padroes, faixas]);
-
-  // ── 3. Por fase: jogos, total, média ──
-  const porFase = useMemo(() => {
-    const acc = {};
-    jogosCalc.forEach(({ j, total }) => { const k = j.fase || "—"; acc[k] = acc[k] || { n:0, total:0 }; acc[k].n++; acc[k].total += total; });
-    return Object.entries(acc).sort((a, b) => rankFase(a[0]) - rankFase(b[0])).map(([k, v]) => ({ key:k, label:faseLabel(k), ...v }));
-  }, [jogosCalc, fases]);
-
-  // ── 4. Por mandante (1ª fase) + mata-mata por fase ──
-  const porMandante = useMemo(() => {
-    const acc = new Map();
-    const primeira = fases[0]?.key;
-    jogosCalc.forEach(({ j, total, praca }) => {
-      const ehGrupos = !fases.length || j.fase === primeira;
-      const k = ehGrupos && j.mandante ? `t|${j.mandante}` : `f|${j.fase}`;
-      const cur = acc.get(k) || { key:k, label: ehGrupos && j.mandante ? j.mandante : faseLabel(j.fase), praca: praca?.cidade || "", faixa: faixaDe(j)?.label || "", n:0, total:0, pads:{}, mata: !(ehGrupos && j.mandante) };
-      cur.n++; cur.total += total; cur.pads[j.padrao || "—"] = (cur.pads[j.padrao || "—"] || 0) + 1;
-      if (cur.praca && praca?.cidade && cur.praca !== praca.cidade && !cur.praca.includes("+")) cur.praca = `${cur.praca} +`;
-      acc.set(k, cur);
-    });
-    const times = orc.times || [];
-    return [...acc.values()].sort((a, b) => (a.mata - b.mata) || (a.mata ? rankFase(a.key.slice(2)) - rankFase(b.key.slice(2)) : (times.indexOf(a.label) === -1 ? 999 : times.indexOf(a.label)) - (times.indexOf(b.label) === -1 ? 999 : times.indexOf(b.label))) || a.label.localeCompare(b.label, "pt-BR"));
-  }, [jogosCalc, fases, orc.times]);
-
-  // ── 5. Categoria → serviço ──
-  const linhas = useMemo(() => {
-    const porSub = {};
-    jogosCalc.forEach(({ orcado }) => { for (const [k, v] of Object.entries(orcado)) porSub[k] = (porSub[k] || 0) + (v || 0); });
-    const grupos = [
-      { key:"logistica", label:CATS[0].label, color:CATS[0].color, subs:CATS[0].subs },
-      ...GRUPOS_PREMISSA,
-    ].map(g => ({
-      key: g.key, label: g.label, color: g.color, tipo: "variavel",
-      itens: g.subs.map(sub => ({ key: sub.key, label: sub.label, valor: porSub[sub.key] || 0 })).filter(it => it.valor > 0).sort((a, b) => b.valor - a.valor),
-    }));
-    const fixosItens = (orc.servicosFixos || []).flatMap(sec => {
-      const itens = (sec.itens || []).filter(it => (Number(it.orcado) || 0) > 0);
-      if (itens.length === 0) return [];
-      return [
-        { key:`sec_${sec.secao}`, label:sec.secao, valor:itens.reduce((s, it) => s + (Number(it.orcado) || 0), 0), secao:true },
-        ...itens.map(it => ({ key:`it_${it.id}`, label:it.nome, valor:Number(it.orcado) || 0 })),
-      ];
-    });
-    grupos.push({ key:"fixos", label:"Serviços Fixos", color:COR_FIXO, tipo:"fixo", itens:fixosItens });
-    return grupos.map(g => ({ ...g, total: g.key === "fixos" ? totais.totalFixos : g.itens.reduce((s, it) => s + it.valor, 0) }));
-  }, [jogosCalc, orc.servicosFixos, totais.totalFixos]);
-
-  // ── 6. Delta vs edição anterior (só se houver base) ──
   const diff = useMemo(() => orc.baseline ? diffBaseline(orc) : null, [orc]);
 
-  const toggle = key => setAbertas(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
-  const numFixos = (orc.servicosFixos || []).reduce((s, sec) => s + (sec.itens || []).filter(it => (Number(it.orcado) || 0) > 0).length, 0);
-  const numSecoes = (orc.servicosFixos || []).filter(sec => (sec.itens || []).some(it => (Number(it.orcado) || 0) > 0)).length;
+  // Base (edição anterior) por subKey e por fixo (seção|nome normalizado) — só rótulo/valor, sem mexer na base.
+  const baseVar = useMemo(() => {
+    const m = {};
+    (diff?.grupos || []).forEach(g => g.rows.forEach(r => { if (!r.soBase) m[r.key] = (m[r.key] || 0) + r.base; }));
+    return m;
+  }, [diff]);
+  const baseFixo = useMemo(() => {
+    const m = {};
+    (diff?.fixos || []).forEach(sec => sec.rows.forEach(r => { if (!r.soBase) m[`${sec.secao}|${r.key}`] = r.base; }));
+    return m;
+  }, [diff]);
+  // Só-base (linhas de 2026 sem equivalente em 2027) entram no total da base do bloco, para o delta fechar com o Comparativo.
+  const soBaseVar  = (diff?.grupos || []).reduce((s, g) => s + g.rows.filter(r => r.soBase).reduce((a, r) => a + r.base, 0), 0);
+  const soBaseFixo = (diff?.fixos  || []).reduce((s, f) => s + f.rows.filter(r => r.soBase).reduce((a, r) => a + r.base, 0), 0);
+
+  // ── Variáveis: macro grupos → linhas (subKey) ──
+  const variaveis = useMemo(() => {
+    const porSub = {};
+    jogos.forEach(j => { const o = calcOrcadoJogo(orc, j); for (const [k, v] of Object.entries(o)) porSub[k] = (porSub[k] || 0) + (v || 0); });
+    const usados = new Set();
+    const grupos = MACRO_GRUPOS_VARIAVEIS.map(g => {
+      const itens = g.subs.map(sub => { usados.add(sub.key); return { key:sub.key, label:sub.label, valor:porSub[sub.key] || 0, base:baseVar[sub.key] || 0 }; })
+        .filter(it => it.valor > 0 || it.base > 0).sort((a, b) => b.valor - a.valor);
+      return { ...g, itens, total: itens.reduce((s, it) => s + it.valor, 0), base: itens.reduce((s, it) => s + it.base, 0) };
+    });
+    const sobra = Object.keys(porSub).filter(k => !usados.has(k) && porSub[k] > 0);
+    if (sobra.length) grupos.push({ ...MACRO_OUTROS, itens: sobra.map(k => ({ key:k, label:k, valor:porSub[k], base:baseVar[k] || 0 })), total: sobra.reduce((s, k) => s + porSub[k], 0), base: sobra.reduce((s, k) => s + (baseVar[k] || 0), 0) });
+    return grupos.filter(g => g.total > 0 || g.base > 0);
+  }, [orc, jogos, baseVar]);
+
+  // ── Fixos: seções do orçamento → itens ──
+  const fixos = useMemo(() => (orc.servicosFixos || []).map((sec, i) => {
+    const itens = (sec.itens || []).map(it => ({ key:`fx_${it.id}`, label:it.nome, valor:Number(it.orcado) || 0, base:baseFixo[`${sec.secao}|fx_${it.id}`] || 0 }))
+      .filter(it => it.valor > 0 || it.base > 0).sort((a, b) => b.valor - a.valor);
+    return { key:`sec_${i}`, label:sec.secao, color:COR_FIXO, itens, total: itens.reduce((s, it) => s + it.valor, 0), base: itens.reduce((s, it) => s + it.base, 0) };
+  }).filter(g => g.total > 0 || g.base > 0), [orc.servicosFixos, baseFixo]);
+
+  const blocos = [
+    { key:"var",  titulo:"Custos variáveis", sub:`por jogo · ${numJogos} jogo${numJogos===1?"":"s"}`, cor:COR_VAR,  icon:CalendarDays, grupos:variaveis, total:totais.totalJogos, base: variaveis.reduce((s, g) => s + g.base, 0) + soBaseVar,  porJogo:true },
+    { key:"fixo", titulo:"Custos fixos",     sub:"por edição",                                          cor:COR_FIXO, icon:Briefcase,    grupos:fixos,     total:totais.totalFixos, base: fixos.reduce((s, g) => s + g.base, 0) + soBaseFixo, porJogo:false },
+  ];
+  const temBase = !!diff;
+  const nCols = 4 + (temBase ? 2 : 0) + 1;
+
+  const renderBloco = (b) => (
+    <Card T={T} key={b.key} accent={b.cor}>
+      {/* Cabeçalho do bloco: total grande + % do geral (+ base/variação) */}
+      <div style={{padding:"16px 20px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`}}>
+        <span style={{width:38,height:38,borderRadius:10,background:`${b.cor}16`,color:b.cor,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><b.icon size={18} strokeWidth={2.25}/></span>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:b.cor}}>{b.titulo}</div>
+          <div style={{fontSize:11.5,color:T.textSm,marginTop:2}}>{b.sub} · {pctOf(b.total, totalGeral)} do orçamento</div>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div className="num" style={{fontSize:24,fontWeight:700,color:T.text,fontFamily:FONT.num,lineHeight:1.1}}>{fmt(b.total)}</div>
+          {b.porJogo && numJogos > 0 && <div style={{fontSize:11,color:T.textSm}}>média {fmt(Math.round(b.total / numJogos))} por jogo</div>}
+        </div>
+        {temBase && (
+          <div style={{textAlign:"right",paddingLeft:16,borderLeft:`1px solid ${T.border}`}}>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textSm}}>{orc.baseline.label}</div>
+            <div className="num" style={{fontSize:14,fontWeight:600,color:T.textMd,fontFamily:FONT.num}}>{fmt(b.base)}</div>
+            <div className="num" style={{fontSize:12,fontWeight:700,color:deltaCor(b.total - b.base, T),fontFamily:FONT.num}}>
+              {fmtDelta(b.total - b.base)}{b.base ? ` (${b.total - b.base >= 0 ? "+" : ""}${(((b.total - b.base) / b.base) * 100).toFixed(1)}%)` : ""}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",minWidth:temBase ? 820 : 620}}>
+          <thead>
+            <tr style={{background:T.surfaceAlt||T.bg}}>
+              <th style={thStyle(T, true)}>Grupo</th>
+              <th style={thStyle(T)}>Orçado</th>
+              {b.porJogo && <th style={thStyle(T)}>Por jogo</th>}
+              <th style={thStyle(T)}>% do bloco</th>
+              {temBase && <th style={thStyle(T)}>{orc.baseline.label}</th>}
+              {temBase && <th style={thStyle(T)}>Δ</th>}
+              <th style={{...thStyle(T), textAlign:"left", paddingLeft:20}}>Peso</th>
+            </tr>
+          </thead>
+          <tbody>
+            {b.grupos.map(g => {
+              const pct = b.total ? (g.total / b.total) * 100 : 0;
+              const aberto = abertos.has(`${b.key}:${g.key}`);
+              const delta = g.total - g.base;
+              return [
+                <tr key={g.key} onClick={() => g.itens.length && toggle(`${b.key}:${g.key}`)}
+                  title={g.itens.length ? (aberto ? "Fechar linhas" : "Ver linhas do grupo") : undefined}
+                  style={{borderTop:`1px solid ${T.border}`,cursor:g.itens.length ? "pointer" : "default"}}
+                  onMouseEnter={e => { if (g.itens.length) e.currentTarget.style.background = T.surfaceAlt||T.bg; }}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{padding:"13px 16px",fontWeight:600,whiteSpace:"nowrap",color:T.text,fontSize:13.5}}>
+                    <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                      <ChevronRight size={14} strokeWidth={2.5} style={{color:g.itens.length ? T.textMd : "transparent",transform:aberto ? "rotate(90deg)" : "none",transition:"transform .15s",flexShrink:0}}/>
+                      <span style={{width:9,height:9,borderRadius:2,background:g.color,flexShrink:0}}/>
+                      {g.label}
+                      <span style={{fontSize:10.5,color:T.textSm,fontWeight:500}}>{g.itens.length} linha{g.itens.length===1?"":"s"}</span>
+                    </span>
+                  </td>
+                  <td style={tdNum(T, { fontWeight:700, fontSize:13.5 })}>{fmt(g.total)}</td>
+                  {b.porJogo && <td style={tdNum(T, { color:T.textMd })}>{numJogos ? fmt(Math.round(g.total / numJogos)) : "—"}</td>}
+                  <td style={tdNum(T, { color:T.textMd })}>{pct.toFixed(1)}%</td>
+                  {temBase && <td style={tdNum(T, { color:T.textMd })}>{g.base ? fmt(g.base) : "—"}</td>}
+                  {temBase && <td style={tdNum(T, { color:deltaCor(delta, T), fontWeight:600 })}>{fmtDelta(delta)}</td>}
+                  <td style={{padding:"13px 20px",minWidth:140}}><Progress value={pct} T={T} color={g.color}/></td>
+                </tr>,
+                ...(aberto ? g.itens.map(it => {
+                  const d = it.valor - it.base;
+                  return (
+                    <tr key={`${g.key}_${it.key}`} style={{borderTop:`1px solid ${T.border}`,background:T.surfaceAlt||T.bg}}>
+                      <td style={{padding:"8px 16px 8px 54px",whiteSpace:"nowrap",color:T.textMd,fontSize:12}}>{it.label}</td>
+                      <td style={tdNum(T, { padding:"8px 16px", fontSize:12, color:T.textMd })}>{it.valor ? fmt(it.valor) : "—"}</td>
+                      {b.porJogo && <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:T.textSm })}>{numJogos && it.valor ? fmt(Math.round(it.valor / numJogos)) : ""}</td>}
+                      <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:T.textSm })}>{g.total ? `${((it.valor / g.total) * 100).toFixed(1)}%` : ""}</td>
+                      {temBase && <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:T.textSm })}>{it.base ? fmt(it.base) : "—"}</td>}
+                      {temBase && <td style={tdNum(T, { padding:"8px 16px", fontSize:11, color:deltaCor(d, T) })}>{fmtDelta(d)}</td>}
+                      <td style={{padding:"8px 20px",minWidth:140}}><Progress value={g.total ? (it.valor / g.total) * 100 : 0} T={T} color={`${g.color}88`} height={3}/></td>
+                    </tr>
+                  );
+                }) : []),
+              ];
+            })}
+            {b.grupos.length === 0 && (
+              <tr><td colSpan={nCols} style={{padding:"14px 16px",fontSize:12,color:T.textSm}}>Nada orçado neste bloco ainda.</td></tr>
+            )}
+            <tr style={{borderTop:`2px solid ${T.borderStrong||T.border}`,background:`${b.cor}0c`,fontWeight:700}}>
+              <td style={{padding:"13px 16px",color:b.cor,fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase"}}>Total {b.titulo.toLowerCase()}</td>
+              <td style={tdNum(T, { color:b.cor, fontSize:14, fontWeight:700 })}>{fmt(b.total)}</td>
+              {b.porJogo && <td style={tdNum(T, { color:T.textMd })}>{numJogos ? fmt(Math.round(b.total / numJogos)) : "—"}</td>}
+              <td style={tdNum(T)}>100%</td>
+              {temBase && <td style={tdNum(T, { color:T.textMd })}>{fmt(b.base)}</td>}
+              {temBase && <td style={tdNum(T, { color:deltaCor(b.total - b.base, T) })}>{fmtDelta(b.total - b.base)}</td>}
+              <td/>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:18}}>
-      {/* ── 1 + 6. Blocos: Variáveis · Fixos · Total (com delta vs base) ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12}}>
-        <BlocoCard T={T} cor={COR_VAR} icon={CalendarDays} titulo="Custos variáveis"
-          valor={fmtK(totais.totalJogos)}
-          linha1={`${numJogos} jogo${numJogos===1?"":"s"} · média ${numJogos ? fmt(totais.totalJogos / numJogos) : "—"} por jogo`}
-          linha2={`${pctOf(totais.totalJogos, totalGeral)} do total · ${fmt(totais.totalJogos)}`}/>
-        <BlocoCard T={T} cor={COR_FIXO} icon={Briefcase} titulo="Custos fixos"
-          valor={fmtK(totais.totalFixos)}
-          linha1={`${numFixos} serviço${numFixos===1?"":"s"} em ${numSecoes} seç${numSecoes===1?"ão":"ões"} · por edição`}
-          linha2={`${pctOf(totais.totalFixos, totalGeral)} do total · ${fmt(totais.totalFixos)}`}/>
-        <BlocoCard T={T} cor={T.text || "#111827"} icon={Wallet} titulo="Total geral"
-          valor={fmtK(totalGeral)}
-          linha1={fmt(totalGeral)}
-          linha2={diff ? null : "Sem base de comparação — crie na aba Comparativo"}
-          rodape={diff && (
-            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:2,fontSize:12}}>
-              {diff.delta >= 0 ? <TrendingUp size={14} color={deltaCor(diff.delta, T)}/> : <TrendingDown size={14} color={deltaCor(diff.delta, T)}/>}
-              <span style={{color:T.textMd}}>vs {orc.baseline.label}:</span>
-              <span className="num" style={{fontFamily:FONT.num,fontWeight:700,color:deltaCor(diff.delta, T)}}>
-                {fmtDelta(diff.delta)}{diff.totalBase ? ` (${diff.delta >= 0 ? "+" : ""}${((diff.delta / diff.totalBase) * 100).toFixed(1)}%)` : ""}
-              </span>
-              {diff.numAddons > 0 && <Badge T={T} color="#8b5cf6" size="sm">{diff.numAddons} add-on{diff.numAddons===1?"":"s"}</Badge>}
-              <span style={{fontSize:11,color:T.textSm,display:"inline-flex",alignItems:"center",gap:4}}><GitCompareArrows size={12}/> detalhe na aba Comparativo</span>
+      {/* ── Total geral ── */}
+      <Card T={T}>
+        <div style={{padding:"18px 22px",display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
+          <span style={{width:44,height:44,borderRadius:12,background:`${T.brand||"#65B32E"}16`,color:T.brand||"#65B32E",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Wallet size={20} strokeWidth={2.25}/></span>
+          <div style={{flex:1,minWidth:200}}>
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:T.textSm}}>Orçamento total · {orc.meta.nome} {orc.meta.edicao}</div>
+            <div className="num" style={{fontSize:30,fontWeight:700,color:T.text,fontFamily:FONT.num,letterSpacing:"-0.01em",lineHeight:1.1,marginTop:2}}>{fmt(totalGeral)}</div>
+          </div>
+          {blocos.map(b => (
+            <div key={b.key} style={{textAlign:"right",paddingLeft:20,borderLeft:`1px solid ${T.border}`}}>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:b.cor}}>{b.titulo}</div>
+              <div className="num" style={{fontSize:16,fontWeight:700,color:T.text,fontFamily:FONT.num}}>{fmtK(b.total)}</div>
+              <div style={{fontSize:11,color:T.textSm}}>{pctOf(b.total, totalGeral)}</div>
             </div>
-          )}/>
-      </div>
-
-      {/* ── 2. Matriz padrão × faixa ── */}
-      <Card T={T} accent={COR_VAR}>
-        <SectionHeader T={T} icon={LayoutGrid} title="Jogos por padrão × distância"
-          subtitle="Cada célula: nº de jogos · valor médio por jogo · total. É a grade que sustenta o custo variável."/>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
-            <thead>
-              <tr style={{background:T.surfaceAlt||T.bg}}>
-                <th style={thStyle(T, true)}>Padrão</th>
-                {matriz.colunas.map(c => <th key={c.key} style={thStyle(T)}>{c.label}</th>)}
-                <th style={{...thStyle(T), borderLeft:`1px solid ${T.border}`}}>Total padrão</th>
-              </tr>
-            </thead>
-            <tbody>
-              {matriz.linhas.map(p => {
-                const tp = matriz.porPadrao[p];
-                return (
-                  <tr key={p} style={{borderTop:`1px solid ${T.border}`}}>
-                    <td style={{padding:"10px 16px",fontWeight:700,color:T.text,fontSize:13,whiteSpace:"nowrap"}}>
-                      <span style={{display:"inline-flex",alignItems:"center",gap:8}}><Layers size={13} color={COR_VAR}/>{p}</span>
-                    </td>
-                    {matriz.colunas.map(c => {
-                      const cel = matriz.cel[`${p}|${c.key}`];
-                      if (!cel) return <td key={c.key} style={tdNum(T, { color:T.textSm })}>—</td>;
-                      return (
-                        <td key={c.key} style={tdNum(T)}>
-                          <div style={{fontWeight:700}}>{fmt(cel.total)}</div>
-                          <div style={{fontSize:10.5,color:T.textSm,fontFamily:FONT.ui}}>
-                            <b style={{color:T.textMd}}>{cel.n}</b> jogo{cel.n===1?"":"s"} · <span className="num" style={{fontFamily:FONT.num}}>{fmt(Math.round(cel.total / cel.n))}</span>/jogo
-                          </div>
-                        </td>
-                      );
-                    })}
-                    <td style={tdNum(T, { borderLeft:`1px solid ${T.border}`, background:T.surfaceAlt||T.bg })}>
-                      <div style={{fontWeight:700}}>{fmt(tp.total)}</div>
-                      <div style={{fontSize:10.5,color:T.textSm,fontFamily:FONT.ui}}><b style={{color:T.textMd}}>{tp.n}</b> jogo{tp.n===1?"":"s"} · {pctOf(tp.total, totais.totalJogos)}</div>
-                    </td>
-                  </tr>
-                );
-              })}
-              <tr style={{borderTop:`2px solid ${T.borderStrong||T.border}`,background:T.surfaceAlt||T.bg}}>
-                <td style={{padding:"12px 16px",fontWeight:700,color:T.text,fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase"}}>Total faixa</td>
-                {matriz.colunas.map(c => {
-                  const tf = matriz.porFaixa[c.key];
-                  return (
-                    <td key={c.key} style={tdNum(T)}>
-                      <div style={{fontWeight:700}}>{fmt(tf.total)}</div>
-                      <div style={{fontSize:10.5,color:T.textSm,fontFamily:FONT.ui}}><b style={{color:T.textMd}}>{tf.n}</b> jogo{tf.n===1?"":"s"} · {pctOf(tf.total, totais.totalJogos)}</div>
-                    </td>
-                  );
-                })}
-                <td style={tdNum(T, { borderLeft:`1px solid ${T.border}`, color:COR_VAR, fontSize:14, fontWeight:700 })}>
-                  <div>{fmt(totais.totalJogos)}</div>
-                  <div style={{fontSize:10.5,color:T.textSm,fontFamily:FONT.ui,fontWeight:500}}><b style={{color:T.textMd}}>{numJogos}</b> jogos</div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          ))}
+          {diff && (
+            <div style={{textAlign:"right",paddingLeft:20,borderLeft:`1px solid ${T.border}`}}>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:T.textSm}}>vs {orc.baseline.label}</div>
+              <div className="num" style={{fontSize:16,fontWeight:700,color:deltaCor(diff.delta, T),fontFamily:FONT.num,display:"inline-flex",alignItems:"center",gap:6}}>
+                {diff.delta >= 0 ? <TrendingUp size={15}/> : <TrendingDown size={15}/>}{fmtDelta(diff.delta)}
+              </div>
+              <div style={{fontSize:11,color:T.textSm,display:"inline-flex",alignItems:"center",gap:6}}>
+                {diff.totalBase ? `${diff.delta >= 0 ? "+" : ""}${((diff.delta / diff.totalBase) * 100).toFixed(1)}%` : "—"}
+                {diff.numAddons > 0 && <Badge T={T} color="#8b5cf6" size="sm">{diff.numAddons} add-on{diff.numAddons===1?"":"s"}</Badge>}
+                <GitCompareArrows size={12}/>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
-      {/* ── 3. Por fase ── */}
-      {fases.length > 0 && (
-        <Card T={T}>
-          <SectionHeader T={T} icon={Trophy} title="Por fase" subtitle="Jogos, total e custo médio por jogo em cada fase da competição"/>
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:560}}>
-              <thead>
-                <tr style={{background:T.surfaceAlt||T.bg}}>
-                  <th style={thStyle(T, true)}>Fase</th>
-                  <th style={thStyle(T)}>Jogos</th>
-                  <th style={thStyle(T)}>Total</th>
-                  <th style={thStyle(T)}>Média / jogo</th>
-                  <th style={thStyle(T)}>% variável</th>
-                  <th style={{...thStyle(T), textAlign:"left", paddingLeft:20}}>Peso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {porFase.map(f => {
-                  const fase = fases.find(x => x.key === f.key);
-                  const pct = totais.totalJogos ? (f.total / totais.totalJogos) * 100 : 0;
-                  return (
-                    <tr key={f.key} style={{borderTop:`1px solid ${T.border}`}}>
-                      <td style={{padding:"11px 16px",fontWeight:600,color:T.text,fontSize:13,whiteSpace:"nowrap"}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:8}}><span style={{width:8,height:8,borderRadius:2,background:fase?.color||COR_VAR}}/>{f.label}</span>
-                      </td>
-                      <td style={tdNum(T)}>{f.n}</td>
-                      <td style={tdNum(T, { fontWeight:700 })}>{fmt(f.total)}</td>
-                      <td style={tdNum(T, { color:T.textMd })}>{fmt(Math.round(f.total / f.n))}</td>
-                      <td style={tdNum(T, { color:T.textMd })}>{pct.toFixed(1)}%</td>
-                      <td style={{padding:"11px 20px",minWidth:140}}><Progress value={pct} T={T} color={fase?.color||COR_VAR}/></td>
-                    </tr>
-                  );
-                })}
-                <tr style={{borderTop:`2px solid ${T.borderStrong||T.border}`,background:T.surfaceAlt||T.bg,fontWeight:700}}>
-                  <td style={{padding:"12px 16px",color:T.text,fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase"}}>Total variável</td>
-                  <td style={tdNum(T)}>{numJogos}</td>
-                  <td style={tdNum(T, { color:COR_VAR, fontSize:14 })}>{fmt(totais.totalJogos)}</td>
-                  <td style={tdNum(T, { color:T.textMd })}>{numJogos ? fmt(Math.round(totais.totalJogos / numJogos)) : "—"}</td>
-                  <td style={tdNum(T)}>100%</td>
-                  <td/>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+      {/* ── Blocos: Variáveis · Fixos ── */}
+      {blocos.map(renderBloco)}
 
-      {/* ── 5. Categoria → serviço (com "por jogo" nas variáveis) ── */}
-      <Card T={T}>
-        <SectionHeader T={T} icon={LayoutDashboard} title="Por categoria de despesa"
-          subtitle="Clique na linha para abrir o detalhamento por serviço. Variáveis mostram também o valor médio por jogo."/>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:680}}>
-            <thead>
-              <tr style={{background:T.surfaceAlt||T.bg}}>
-                <th style={thStyle(T, true)}>Categoria</th>
-                <th style={thStyle(T)}>Orçado</th>
-                <th style={thStyle(T)}>Por jogo</th>
-                <th style={thStyle(T)}>% do total</th>
-                <th style={{...thStyle(T), textAlign:"left", paddingLeft:20}}>Peso</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Faixa "Variáveis" e "Fixos" como divisórias, com subtotais */}
-              {[
-                { key:"var",  label:"Custos variáveis · por jogo", cor:COR_VAR,  total:totais.totalJogos, grupos:linhas.filter(g => g.tipo === "variavel") },
-                { key:"fixo", label:"Custos fixos · por edição",    cor:COR_FIXO, total:totais.totalFixos, grupos:linhas.filter(g => g.tipo === "fixo") },
-              ].map(bloco => [
-                <tr key={`b-${bloco.key}`} style={{background:`${bloco.cor}10`,borderTop:`3px solid ${bloco.cor}`}}>
-                  <td style={{padding:"9px 16px",fontSize:11,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:bloco.cor}}>{bloco.label}</td>
-                  <td style={tdNum(T, { fontWeight:700, color:bloco.cor })}>{fmt(bloco.total)}</td>
-                  <td style={tdNum(T, { color:T.textSm, fontSize:11 })}>{bloco.key === "var" && numJogos ? fmt(Math.round(bloco.total / numJogos)) : ""}</td>
-                  <td style={tdNum(T, { color:T.textMd })}>{pctOf(bloco.total, totalGeral)}</td>
-                  <td/>
-                </tr>,
-                ...bloco.grupos.flatMap(g => {
-                  const pct = totalGeral ? (g.total / totalGeral) * 100 : 0;
-                  const aberta = abertas.has(g.key);
-                  const temItens = g.itens.length > 0;
-                  return [
-                    <tr key={g.key} onClick={() => temItens && toggle(g.key)}
-                      title={temItens ? (aberta ? "Fechar detalhamento" : "Ver detalhamento por serviço") : undefined}
-                      style={{borderTop:`1px solid ${T.border}`,cursor:temItens?"pointer":"default"}}
-                      onMouseEnter={e => { if (temItens) e.currentTarget.style.background = T.surfaceAlt||T.bg; }}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                      <td style={{padding:"12px 16px",fontWeight:600,whiteSpace:"nowrap",color:T.text,fontSize:13}}>
-                        <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
-                          <ChevronRight size={14} strokeWidth={2.5} style={{color:temItens ? T.textMd : "transparent",transform:aberta ? "rotate(90deg)" : "none",transition:"transform .15s",flexShrink:0}}/>
-                          <span style={{width:8,height:8,borderRadius:2,background:g.color,flexShrink:0}}/>
-                          {g.label}
-                        </span>
-                      </td>
-                      <td style={tdNum(T, { fontWeight:600 })}>{fmt(g.total)}</td>
-                      <td style={tdNum(T, { color:T.textMd })}>{g.tipo === "variavel" && numJogos ? fmt(Math.round(g.total / numJogos)) : "—"}</td>
-                      <td style={tdNum(T, { color:T.textMd })}>{pct.toFixed(1)}%</td>
-                      <td style={{padding:"12px 20px",minWidth:120}}><Progress value={pct} T={T} color={g.color}/></td>
-                    </tr>,
-                    ...(aberta ? g.itens.map(it => {
-                      const pctIt = totalGeral ? (it.valor / totalGeral) * 100 : 0;
-                      return (
-                        <tr key={`${g.key}_${it.key}`} style={{borderTop:`1px solid ${T.border}`,background:T.surfaceAlt||T.bg}}>
-                          <td style={{padding:`${it.secao?"10px":"7px"} 16px ${it.secao?"6px":"7px"} 52px`,whiteSpace:"nowrap",
-                            color:it.secao ? T.textSm : T.textMd, fontSize:it.secao ? 10 : 12, fontWeight:it.secao ? 700 : 500,
-                            letterSpacing:it.secao ? "0.06em" : 0, textTransform:it.secao ? "uppercase" : "none"}}>
-                            {it.label}
-                          </td>
-                          <td style={tdNum(T, { padding:"7px 16px", color:it.secao ? T.textSm : T.textMd, fontSize:12, fontWeight:it.secao?600:400 })}>{fmt(it.valor)}</td>
-                          <td style={tdNum(T, { padding:"7px 16px", color:T.textSm, fontSize:11 })}>{g.tipo === "variavel" && !it.secao && numJogos ? fmt(Math.round(it.valor / numJogos)) : ""}</td>
-                          <td style={tdNum(T, { padding:"7px 16px", color:T.textSm, fontSize:11 })}>{it.secao ? "" : `${pctIt.toFixed(1)}%`}</td>
-                          <td style={{padding:"7px 20px",minWidth:120}}>{!it.secao && <Progress value={g.total ? (it.valor / g.total) * 100 : 0} T={T} color={`${g.color}88`} height={3}/>}</td>
-                        </tr>
-                      );
-                    }) : []),
-                  ];
-                }),
-              ])}
-              <tr style={{borderTop:`3px solid ${T.borderStrong||T.border}`,background:T.surfaceAlt||T.bg,fontWeight:700}}>
-                <td style={{padding:"14px 16px",color:T.text,fontSize:12,letterSpacing:"0.04em",textTransform:"uppercase"}}>Total geral</td>
-                <td style={tdNum(T, { color:T.info||COR_VAR, fontSize:14, fontWeight:700 })}>{fmt(totalGeral)}</td>
-                <td/>
-                <td style={tdNum(T, { fontSize:14 })}>100%</td>
-                <td/>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* ── 4. Por mandante (retrátil) ── */}
-      <Card T={T}>
-        <button onClick={() => setMandantesAberto(v => !v)} style={{
-          width:"100%",padding:"14px 20px",border:"none",background:"transparent",cursor:"pointer",
-          display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,textAlign:"left",fontFamily:FONT.ui,
-          borderBottom: mandantesAberto ? `1px solid ${T.border}` : "none",
-        }}>
-          <span style={{display:"flex",alignItems:"center",gap:12}}>
-            <span style={{width:32,height:32,borderRadius:8,background:`${COR_VAR}14`,color:COR_VAR,display:"inline-flex",alignItems:"center",justifyContent:"center"}}><Users size={16} strokeWidth={2.25}/></span>
-            <span>
-              <span style={{display:"block",fontSize:13,fontWeight:600,color:T.text}}>Por mandante</span>
-              <span style={{display:"block",fontSize:11,color:T.textSm,marginTop:2}}>{porMandante.filter(m => !m.mata).length} mandantes · jogos em casa, categorias e custo · mata-mata ao final</span>
-            </span>
-          </span>
-          <span style={{display:"inline-flex",alignItems:"center",gap:6,color:T.textMd,fontSize:11,fontWeight:600}}>
-            {mandantesAberto ? "Ocultar" : "Mostrar"}{mandantesAberto ? <ChevronUp size={15}/> : <ChevronDown size={15}/>}
-          </span>
-        </button>
-        {mandantesAberto && (
-          <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:720}}>
-              <thead>
-                <tr style={{background:T.surfaceAlt||T.bg}}>
-                  <th style={thStyle(T, true)}>Mandante / fase</th>
-                  <th style={thStyle(T, true)}>Praça · faixa</th>
-                  <th style={thStyle(T)}>Jogos</th>
-                  <th style={thStyle(T, true)}>Categorias</th>
-                  <th style={thStyle(T)}>Total</th>
-                  <th style={thStyle(T)}>Média / jogo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {porMandante.map((mnd, i) => {
-                  const primeiroMata = mnd.mata && (i === 0 || !porMandante[i - 1].mata);
-                  return [
-                    primeiroMata && (
-                      <tr key="sep-mata" style={{background:T.surfaceAlt||T.bg}}>
-                        <td colSpan={6} style={{padding:"7px 16px",fontSize:10,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:T.textSm,borderTop:`2px solid ${T.borderStrong||T.border}`}}>Mata-mata</td>
-                      </tr>
-                    ),
-                    <tr key={mnd.key} style={{borderTop:`1px solid ${T.border}`}}>
-                      <td style={{padding:"10px 16px",fontWeight:600,color:T.text,fontSize:12.5,whiteSpace:"nowrap"}}>{mnd.label}</td>
-                      <td style={{padding:"10px 16px",color:T.textMd,fontSize:12,whiteSpace:"nowrap"}}>{mnd.praca}{mnd.faixa ? <span style={{color:T.textSm}}> · {mnd.faixa}</span> : ""}</td>
-                      <td style={tdNum(T)}>{mnd.n}</td>
-                      <td style={{padding:"10px 16px",whiteSpace:"nowrap"}}>
-                        <span style={{display:"inline-flex",gap:6,flexWrap:"wrap"}}>
-                          {Object.entries(mnd.pads).sort((a, b) => padroes.indexOf(a[0]) - padroes.indexOf(b[0])).map(([p, n]) => (
-                            <Badge key={p} T={T} color={COR_VAR} size="sm">{n}× {p}</Badge>
-                          ))}
-                        </span>
-                      </td>
-                      <td style={tdNum(T, { fontWeight:700 })}>{fmt(mnd.total)}</td>
-                      <td style={tdNum(T, { color:T.textMd })}>{fmt(Math.round(mnd.total / mnd.n))}</td>
-                    </tr>,
-                  ];
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* ── 7. Status / aprovação ── */}
+      {/* ── Status / aprovação ── */}
       {readOnly ? (
         <Card T={T} accent={st.color}>
           <div style={{padding:"16px 20px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>

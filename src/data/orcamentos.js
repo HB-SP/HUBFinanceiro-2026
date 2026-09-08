@@ -277,6 +277,23 @@ export const calcTotais = (orc) => {
 // Item com subKey casa com a linha do serviço; sem subKey é linha só-da-base
 // (aparece como "removido" enquanto a edição atual não tiver o equivalente).
 
+// ─── MACRO GRUPOS DO RESUMO ──────────────────────────────────────────────────
+// Leitura macro da entidade pagadora (mesmos blocos da planilha de orçamento):
+// variáveis agrupados por natureza; fixos seguem as seções do próprio
+// orçamento (o que é fixo nunca migra para variável e vice-versa).
+const _sub = (k) => CATS.flatMap(c => c.subs).find(s => s.key === k);
+const _macro = (key, label, color, keys) => ({ key, label, color, subs: keys.map(_sub).filter(Boolean) });
+export const MACRO_GRUPOS_VARIAVEIS = [
+  _macro("logistica",  "Logística",                CATS[0].color, ["outros_log", "transporte", "uber", "hospedagem", "diaria"]),
+  _macro("equipe",     "Equipe variável",          CATS[1].color, ["coord_um", "prod_um", "prod_campo", "monitoracao", "supervisor1", "supervisor2", "dtv", "vmix", "audio"]),
+  _macro("um_sng",     "UM + SNG",                 "#D97706",     ["um_b1", "um_b2", "um_b3", "um_aux_audio", "montagem_vespera", "coletivas", "geradores", "sng", "sng_extra", "redundancia_sng", "seg_espacial", "seg_extra"]),
+  _macro("cameras",    "Câmeras",                  "#0891B2",     ["drone", "grua", "dslr", "dslrs_transmissor", "carrinho", "goalcam", "refcam", "minidrone", "especial"]),
+  _macro("infra",      "Infraestrutura / Livemode", "#7C3AED",    ["liveu", "internet", "downlink", "distribuicao", "starlink", "maquinas", "infra"]),
+  _macro("incrementos","Incrementos / Feed B",     "#8b5cf6",     ["feed_b", "extra"]),
+];
+// Qualquer subKey que não esteja em nenhum macro grupo cai em "Outros" (não some do total).
+export const MACRO_OUTROS = { key:"outros_var", label:"Outros", color:"#6b7280" };
+
 export const GRUPOS_COMPARATIVO = [
   { key:"logistica", label:CATS[0].label, color:CATS[0].color, subs:CATS[0].subs },
   ...GRUPOS_PREMISSA,
