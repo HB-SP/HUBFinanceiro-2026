@@ -28,10 +28,8 @@ const SUBTABS = [
   { key:"resumo",      label:"Resumo",              icon:LineChart },
 ];
 
-// Visualizador (entidade) vê só o que é proposta: valores por jogo, fixos,
-// comparativo com a edição anterior e resumo. Configuração, premissas e
-// praças são engenharia interna de custo.
-const SUBTABS_VIEWER = ["resumo", "jogos", "servicos", "comparativo"];
+// Visualizador (entidade) vê TODAS as abas, só não edita: o orçamento passa
+// por aprovações e mudanças e a construção fica transparente para quem paga.
 
 function SubTabNav({ active, onChange, T, tabs = SUBTABS }) {
   return (
@@ -88,8 +86,8 @@ export default function OrcamentoEditor({
   const [orc, setOrcRaw]         = useState(null);
   const [eventos, setEventosRaw] = useState([]);
   const [loading, setLoading]    = useState(true);
-  const [sub, setSub]            = useState(canEdit ? "config" : "resumo");
-  const tabs = useMemo(() => canEdit ? SUBTABS : SUBTABS.filter(t => SUBTABS_VIEWER.includes(t.key)), [canEdit]);
+  const [sub, setSub]            = useState(canEdit ? "config" : "resumo");   // visualizador aterrissa no Resumo
+  const tabs = SUBTABS;
   const [showAprovar, setShowAprovar] = useState(false);
   const persistRefs = useRef({}).current;
   const mirrorRef   = useRef(null);
