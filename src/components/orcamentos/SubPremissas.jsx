@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { iSty, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Badge, tableStyles } from "../ui";
-import { PADROES_SUGERIDOS, GRUPOS_PREMISSA, SUBS_PADRAO_FAIXA_KEYS, SUBS_NAO_EDITAVEIS, DSLR_QTDS, valorDSLR, umKeyDoPadrao } from "../../data/orcamentos";
+import { PADROES_SUGERIDOS, GRUPOS_PREMISSA, GRUPO_LOGISTICA_PADRAO, SUBS_PADRAO_FAIXA_KEYS, SUBS_NAO_EDITAVEIS, DSLR_QTDS, MATRIZ_DSLR_QTD_KEY, valorDSLR, umKeyDoPadrao } from "../../data/orcamentos";
 import { fmt } from "../../utils";
 import { Layers, Plus, Trash2, Copy, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -91,7 +91,8 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
     });
   };
 
-  const gruposPremissa = GRUPOS_PREMISSA; // Pessoal · Operações · Livemode (NF por jogo)
+  // Pessoal · Operações · Livemode (NF por jogo) · Logística ajustada por padrão × faixa
+  const gruposPremissa = [...GRUPOS_PREMISSA, GRUPO_LOGISTICA_PADRAO];
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:18}}>
@@ -152,6 +153,9 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
         const aberto = !!abertos[cat.key];
         const ehOperacoes = cat.key === "operacoes";
         const ehLivemode = cat.key === "livemode";
+        // Logística por padrão: só a matriz (sub-linhas por faixa) é editável —
+        // a base vem da faixa/praça (aba Praças & Logística) e não entra na premissa.
+        const ehLogistica = cat.key === GRUPO_LOGISTICA_PADRAO.key;
         // dslr/dslrs_transmissor/infra não são editáveis linha a linha:
         // DSLR vira linha especial (qtd × tabela) e Infra+Distr é derivada.
         const subsEditaveis = cat.subs.filter(sub => !SUBS_NAO_EDITAVEIS.includes(sub.key));
@@ -186,7 +190,9 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
               <div style={{minWidth:0}}>
                 <h3 style={{margin:0,fontSize:13,fontWeight:600,color:T.text,letterSpacing:"-0.005em"}}>{cat.label}</h3>
                 <p style={{margin:"2px 0 0",fontSize:11,color:T.textSm,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                  {aberto ? `Valores por jogo, para cada padrão — ${subsEditaveis.length + (ehOperacoes ? 1 : 0)} linhas` : resumoFechado}
+                  {ehLogistica
+                    ? "Só a matriz padrão × faixa — a base da logística vem da faixa/praça (aba Praças & Logística)"
+                    : (aberto ? `Valores por jogo, para cada padrão — ${subsEditaveis.length + (ehOperacoes ? 1 : 0)} linhas` : resumoFechado)}
                 </p>
               </div>
             </div>
@@ -238,6 +244,15 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
                       </td>
                       {padroes.map(p => {
                         const v = orc.premissas?.[p]?.[sub.key];
+                        if (ehLogistica) {
+                          const n = faixas.filter(f => { const x = orc.premissasFaixa?.[p]?.[f.key]?.[sub.key]; return x != null && x !== ""; }).length;
+                          return (
+                            <td key={p} style={{...ts.tdNum, color: n ? "#D97706" : T.textSm, fontSize:11}}
+                              title="A base vem da faixa/praça (aba Praças & Logística); aqui só o ajuste por faixa">
+                              {n ? `${n} faixa${n===1?"":"s"} ajustada${n===1?"":"s"}` : "faixa / praça"}
+                            </td>
+                          );
+                        }
                         if (!celulaAtiva(sub.key, p)) return (
                           <td key={p} style={{...ts.tdNum, color:T.textSm, fontSize:11}}
                             title={`${sub.label} não se aplica ao padrão ${p}`}>—</td>
@@ -274,7 +289,9 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
                         {padroes.map(p => {
                           const v = orc.premissasFaixa?.[p]?.[f.key]?.[sub.key];
                           const temValor = v != null && v !== "";
-                          const base = Number(orc.premissas?.[p]?.[sub.key]) || 0;
+                          const base = ehLogistica
+                            ? (Number(f.logistica?.[sub.key]) || 0)          // referência: valor da faixa
+                            : (Number(orc.premissas?.[p]?.[sub.key]) || 0);
                           if (!celulaAtiva(sub.key, p)) return (
                             <td key={p} style={{...ts.tdNum, color:T.textSm, fontSize:11}}>—</td>
                           );
@@ -305,11 +322,27 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
                   ];
                 })}
                 {/* DSLR unificado: quantidade por padrão × tabela de preço por quantidade */}
-                {ehOperacoes && (
-                  <tr style={ts.tr}>
+                {ehOperacoes && [
+                  <tr key="dslr" style={ts.tr}>
                     <td style={{...ts.td, color: cat.color, fontWeight:500, fontSize:12}}>
-                      DSLR (Microlink/Transmissor)
-                      <span style={{color:T.textSm, fontWeight:400, fontSize:10}}> · quantidade por padrão</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                        DSLR (Microlink/Transmissor)
+                        <span style={{color:T.textSm, fontWeight:400, fontSize:10}}>· quantidade por padrão</span>
+                        {faixas.length > 0 && (() => {
+                          const n = padroes.reduce((s, p) => s + faixas.filter(f => { const x = orc.premissasFaixa?.[p]?.[f.key]?.[MATRIZ_DSLR_QTD_KEY]; return x != null && x !== ""; }).length, 0);
+                          const on = !!faixasVisiveis.__dslr;
+                          return (
+                            <button onClick={()=>toggleFaixas("__dslr")}
+                              title={on ? "Ocultar quantidade por faixa" : "Quantidade de DSLRs por faixa de distância (ex.: B3 só em SP)"}
+                              style={{display:"inline-flex",alignItems:"center",gap:4,border:`1px solid ${on ? "#D9770688" : T.border}`,
+                                      background: on ? "#D9770614" : "transparent", color: n > 0 || on ? "#D97706" : T.textSm,
+                                      borderRadius:6,padding:"2px 8px",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:FONT.ui,whiteSpace:"nowrap"}}>
+                              {on ? <ChevronUp size={11}/> : <ChevronDown size={11}/>}
+                              faixas{n > 0 ? ` · ${n}` : ""}
+                            </button>
+                          );
+                        })()}
+                      </span>
                     </td>
                     {padroes.map(p => {
                       const qtd = orc.dslrQtd?.[p] ?? 0;
@@ -331,8 +364,45 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
                         </td>
                       );
                     })}
+                  </tr>,
+                  // Quantidade de DSLRs por faixa: vazio herda a quantidade do padrão
+                  ...(faixasVisiveis.__dslr ? faixas.map(f => (
+                    <tr key={`dslr-${f.key}`} style={{...ts.tr, background:T.surfaceAlt||T.bg}}>
+                      <td style={{...ts.td, padding:"4px 14px 4px 28px", fontSize:11, color:T.textMd}}>└ {f.label}</td>
+                      {padroes.map(p => {
+                        const v = orc.premissasFaixa?.[p]?.[f.key]?.[MATRIZ_DSLR_QTD_KEY];
+                        const temValor = v != null && v !== "";
+                        const qtd = temValor ? Number(v) : (orc.dslrQtd?.[p] ?? 0);
+                        return (
+                          <td key={p} style={{...ts.tdNum, padding:"4px 10px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>
+                              <select value={temValor ? v : ""} disabled={readOnly}
+                                onChange={e=>setValorFaixaMatriz(p, f.key, MATRIZ_DSLR_QTD_KEY, e.target.value)}
+                                style={{...IS, maxWidth:84, fontSize:11, padding:"3px 6px",
+                                        background: temValor ? "#D9770614" : (T.surface||T.bg),
+                                        borderColor: temValor ? "#D9770688" : undefined, opacity: readOnly ? 0.7 : 1}}>
+                                <option value="">herda ({orc.dslrQtd?.[p] ?? 0})</option>
+                                <option value={0}>0</option>
+                                {DSLR_QTDS.map(q => <option key={q} value={q}>{q}</option>)}
+                              </select>
+                              <span className="num" style={{fontSize:11,color:T.textMd,fontFamily:FONT.num,minWidth:64,textAlign:"right"}}>
+                                {fmt(valorDSLR(orc, p, qtd))}
+                              </span>
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )) : []),
+                ]}
+                {ehLogistica ? (
+                  <tr style={ts.totalRow}>
+                    <td colSpan={padroes.length + 1} style={{...ts.td, fontWeight:500, fontSize:11, color:T.textMd}}>
+                      Abra "faixas" em uma linha para ajustar a logística de um padrão numa faixa (ex.: hospedagem só no B2 em SP200).
+                      Célula vazia = vale a faixa ou a logística própria da praça.
+                    </td>
                   </tr>
-                )}
+                ) : (
                 <tr style={ts.totalRow}>
                   <td style={{...ts.td, fontWeight:700, fontSize:12}}>
                     {ehLivemode ? "Total Livemode = Infra + Distr." : `Total ${cat.label}`}
@@ -342,6 +412,7 @@ export default function SubPremissas({ orc, setOrc, readOnly, T }) {
                     <td key={p} style={{...ts.tdNum, fontWeight:700}}>{fmt(totalGrupo(p))}</td>
                   ))}
                 </tr>
+                )}
               </tbody>
             </table>
           </div>}

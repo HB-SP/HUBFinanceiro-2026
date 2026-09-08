@@ -46,7 +46,23 @@ export const SUBS_LIVEMODE_KEYS = ["maquinas", "starlink", "downlink", "distribu
 // serviço na tabela de Operações. Persistência:
 //   orc.premissasFaixa[padrao][faixaKey][subKey] = valor absoluto
 // Célula vazia herda o valor base da premissa do padrão para aquele subKey.
-export const SUBS_PADRAO_FAIXA_KEYS = ["um_b1", "um_b2", "um_b3", "geradores", "sng"];
+// Além de UM/Geradores/SNG, a matriz aceita pessoal (coord/prod UM mudam por
+// distância no B2) e logística (ex.: hospedagem só no B2 em SP200) — assim a
+// aba Premissas explica 100% dos jogos sem override. Célula de logística na
+// matriz vence a faixa E a logística própria da praça.
+export const SUBS_PADRAO_FAIXA_KEYS = ["um_b1", "um_b2", "um_b3", "geradores", "sng", "coord_um", "prod_um", ...SUBS_LOGISTICA.map(s => s.key)];
+// Pseudo-chave da matriz: quantidade de DSLRs por padrão × faixa (ex.: B3 só
+// leva DSLR em SP). Vazio herda orc.dslrQtd[padrao]; o jogo ainda pode sobrepor.
+export const MATRIZ_DSLR_QTD_KEY = "dslrQtd";
+export const dslrQtdEfetiva = (orc, padrao, faixaKey, qtdJogo) => {
+  if (qtdJogo != null && qtdJogo !== "") return Number(qtdJogo) || 0;
+  const fx = orc?.premissasFaixa?.[padrao]?.[faixaKey]?.[MATRIZ_DSLR_QTD_KEY];
+  if (fx != null && fx !== "") return Number(fx) || 0;
+  return orc?.dslrQtd?.[padrao] ?? 0;
+};
+// Grupo extra da aba Premissas: logística ajustada por padrão × faixa (só a
+// matriz é editável — a base vem da faixa/praça na aba Praças & Logística).
+export const GRUPO_LOGISTICA_PADRAO = { key:"logistica_padrao", label:"Logística · ajuste por padrão", color:CATS[0].color, subs:CATS[0].subs };
 
 // Regras especiais do construtor (não editáveis linha a linha):
 //   • dslr + dslrs_transmissor são o MESMO serviço — unificados na linha `dslr`,
@@ -184,7 +200,7 @@ export const calcOrcadoJogo = (orc, jogo) => {
   ["um_b1", "um_b2", "um_b3"].forEach(k => { if (k !== umKey) out[k] = 0; });
   // DSLR unificado (Microlink/Transmissor): preço pela quantidade contratada —
   // a do padrão, ou a sobreposta no jogo
-  out.dslr = valorDSLR(orc, jogo?.padrao, jogo?.dslrQtd);
+  out.dslr = valorDSLR(orc, jogo?.padrao, dslrQtdEfetiva(orc, jogo?.padrao, praca?.faixaKey, jogo?.dslrQtd));
   out.dslrs_transmissor = 0;
   // Infra + Distr. é derivada: a soma já está nas linhas Livemode — zera para não duplicar
   out.infra = 0;

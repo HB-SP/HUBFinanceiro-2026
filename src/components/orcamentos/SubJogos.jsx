@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { iSty, CATS, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Badge, tableStyles } from "../ui";
-import { calcOrcadoJogo, blocosJogo, GRUPOS_PREMISSA, SUBS_NAO_EDITAVEIS, DSLR_QTDS, valorDSLR } from "../../data/orcamentos";
+import { calcOrcadoJogo, blocosJogo, GRUPOS_PREMISSA, SUBS_NAO_EDITAVEIS, DSLR_QTDS, valorDSLR, dslrQtdEfetiva } from "../../data/orcamentos";
 import { fmt } from "../../utils";
 import { CalendarDays, Plus, Trash2, Copy, ChevronDown, ChevronUp, Eraser, Zap } from "lucide-react";
 
@@ -384,7 +384,9 @@ function DetalheOverrides({ orc, jogo, readOnly, T, onSetOverride, onLimpar, onP
   const semOverrides = { ...jogo, overrides: {} };
   const base = calcOrcadoJogo(orc, semOverrides);
   const nOverrides = Object.keys(jogo.overrides || {}).length;
-  const qtdPadrao = orc.dslrQtd?.[jogo.padrao] ?? 0;
+  // Quantidade herdada: matriz padrão × faixa da praça, senão a do padrão
+  const faixaJogo = (orc.pracas || []).find(p => p.id === jogo.pracaId)?.faixaKey;
+  const qtdPadrao = dslrQtdEfetiva(orc, jogo.padrao, faixaJogo, null);
 
   return (
     <div>
