@@ -3,7 +3,7 @@ import { iSty, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Stat, Badge, tableStyles } from "../ui";
 import { SUBS_LOGISTICA, logisticaDaPraca, calcOrcadoJogo } from "../../data/orcamentos";
 import { fmt, fmtK } from "../../utils";
-import { MapPin, Route, Plus, Trash2, Wallet, SlidersHorizontal, Link2, Unlink2 } from "lucide-react";
+import { MapPin, Route, Plus, Trash2, Wallet, SlidersHorizontal, Link2, Unlink2, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
 // ─── PRAÇAS & LOGÍSTICA ───────────────────────────────────────────────────────
 // Como a logística de um jogo é montada (nesta ordem):
@@ -22,6 +22,13 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
   const [novaFaixa, setNovaFaixa] = useState("");
   const [novaCidade, setNovaCidade] = useState("");
   const [novaCidadeFaixa, setNovaCidadeFaixa] = useState("");
+  // Grupos (faixas) recolhidos na tabela de praças — persiste por orçamento no navegador
+  const lsKeyRecolhidos = `hub_orc_pracas_recolhidos_${orc.id}`;
+  const [recolhidos, setRecolhidos] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(lsKeyRecolhidos) || "[]")); } catch { return new Set(); }
+  });
+  const salvaRecolhidos = (next) => { try { localStorage.setItem(lsKeyRecolhidos, JSON.stringify([...next])); } catch {} return next; };
+  const toggleGrupo = (key) => setRecolhidos(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return salvaRecolhidos(n); });
 
   const faixas = orc.faixas || [];
   const pracas = orc.pracas || [];
@@ -256,7 +263,20 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
       <Card T={T} accent={COR_PROPRIA}>
         <SectionHeader T={T} icon={MapPin} title="2 · Praças por faixa"
           subtitle="Cada praça mostra a logística que VALE nos seus jogos: herdada da faixa (verde) ou própria (âmbar). Ajustes por jogo ficam na aba Jogos."
-          right={<Legenda/>}/>
+          right={
+            <span style={{display:"inline-flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+              <Legenda/>
+              {grupos.length > 0 && (() => {
+                const tudoRecolhido = grupos.every(g => recolhidos.has(g.key));
+                return (
+                  <Button T={T} variant="secondary" size="sm" icon={tudoRecolhido ? ChevronsUpDown : ChevronsDownUp}
+                    onClick={() => setRecolhidos(() => salvaRecolhidos(tudoRecolhido ? new Set() : new Set(grupos.map(g => g.key))))}>
+                    {tudoRecolhido ? "Expandir tudo" : "Recolher tudo"}
+                  </Button>
+                );
+              })()}
+            </span>
+          }/>
         <div style={ts.wrap}>
           <table style={{...ts.table, minWidth:980}}>
             <thead style={ts.thead}>
@@ -273,11 +293,14 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
             <tbody>
               {grupos.map(g => {
                 const st = info.porFaixa.get(g.key) || { pracas:0, jogos:0, proprias:0 };
+                const aberto = !recolhidos.has(g.key);
                 return [
                   // Cabeçalho da faixa: os valores de referência nas mesmas colunas
-                  <tr key={`fx-${g.key}`} style={{background:`${COR_FAIXA}0d`, borderTop:`2px solid ${COR_FAIXA}55`}}>
+                  <tr key={`fx-${g.key}`} onClick={()=>toggleGrupo(g.key)} title={aberto ? "Recolher faixa" : "Expandir faixa"}
+                    style={{background:`${COR_FAIXA}0d`, borderTop:`2px solid ${COR_FAIXA}55`, cursor:"pointer", userSelect:"none"}}>
                     <td colSpan={3} style={{padding:"9px 14px"}}>
                       <span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                        {aberto ? <ChevronDown size={14} color={T.textSm}/> : <ChevronRight size={14} color={T.textSm}/>}
                         <span style={{width:8,height:8,borderRadius:2,background:g.faixa ? COR_FAIXA : (T.danger||"#DC2626")}}/>
                         <span style={{fontSize:12,fontWeight:700,color:T.text}}>{g.faixa ? g.faixa.label : "Sem faixa válida"}</span>
                         <span style={{fontSize:11,color:T.textSm}}>{g.faixa ? "referência da faixa · por jogo" : "escolha uma faixa para estas praças"}</span>
@@ -292,7 +315,7 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
                     <td className="num" style={{...ts.tdNum, padding:"9px 14px", color:COR_FAIXA, fontWeight:700, fontSize:12}}>{g.faixa ? fmt(somaLog(g.faixa.logistica)) : ""}</td>
                     <td colSpan={readOnly ? 1 : 2}/>
                   </tr>,
-                  ...g.pracas.map(p => {
+                  ...(aberto ? g.pracas : []).map(p => {
                     const propria = !!p.logistica;
                     const { logistica } = logisticaDaPraca(orc, p);
                     const stP = info.porPraca.get(p.id) || { jogos:0, ajustados:[], total:0 };
@@ -367,7 +390,7 @@ export default function SubPracas({ orc, setOrc, readOnly, T }) {
                       </tr>
                     );
                   }),
-                  g.pracas.length === 0 && (
+                  aberto && g.pracas.length === 0 && (
                     <tr key={`vazio-${g.key}`}>
                       <td colSpan={nCols} style={{...ts.td, padding:"8px 14px 10px 30px", color:T.textSm, fontSize:11, fontStyle:"italic"}}>Nenhuma praça nesta faixa.</td>
                     </tr>
