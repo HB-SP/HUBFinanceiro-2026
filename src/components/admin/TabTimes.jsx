@@ -22,7 +22,12 @@ const MODULOS = [
   { id: "fornecedores", label: "Hub de Fornecedores" },
 ];
 const CORES = ["#65B32E", "#2563EB", "#DC2626", "#FACC15", "#7C3AED", "#0891B2", "#D97706", "#6B7280"];
-const NOVO = () => ({ nome: "", cor: "#2563EB", dominios: [], role_padrao: "visualizador", aprovacao_automatica: false, entidades: [], modulos: ["orcamentos"], descricao: "" });
+const NOVO = () => ({ nome: "", cor: "#2563EB", dominios: [], role_padrao: "visualizador", aprovacao_automatica: false, entidades: [], modulos: ["orcamentos"], escopo: "notas", descricao: "" });
+// Escopo do visualizador dentro dos campeonatos
+const ESCOPOS = [
+  { id: "notas",    label: "Só Notas Fiscais e Relatório", desc: "Padrão das entidades (FFU, FPF)." },
+  { id: "completo", label: "Todo o hub em leitura",        desc: "Todas as abas, sem editar, cadastrar ou aprovar." },
+];
 const normDominio = (d) => String(d || "").trim().toLowerCase().replace(/^@/, "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 
 export default function TabTimes({ T, users = [], onUsersChanged }) {
@@ -64,7 +69,7 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
     const e = editando;
     if (!e.nome.trim()) { setErro("Dê um nome ao time."); return; }
     setSalvando(true); setErro("");
-    const payload = { nome: e.nome.trim(), cor: e.cor, dominios: e.dominios, role_padrao: e.role_padrao, aprovacao_automatica: !!e.aprovacao_automatica, entidades: e.entidades, modulos: e.modulos, descricao: e.descricao || null };
+    const payload = { nome: e.nome.trim(), cor: e.cor, dominios: e.dominios, role_padrao: e.role_padrao, aprovacao_automatica: !!e.aprovacao_automatica, entidades: e.entidades, modulos: e.modulos, escopo: e.escopo === "completo" ? "completo" : "notas", descricao: e.descricao || null };
     let res;
     if (e.id) res = await supabase.from("teams").update(payload).eq("id", e.id).select().single();
     else      res = await supabase.from("teams").insert(payload).select().single();
@@ -160,6 +165,7 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
                   {label("Cadastro novo")}
                   <span style={{ color: T.text }}>{ROLES.find(r => r.id === t.role_padrao)?.label || t.role_padrao}</span>
                   <span style={{ display: "block", fontSize: 11, color: t.aprovacao_automatica ? "#16A34A" : T.textSm }}>{t.aprovacao_automatica ? "entra direto" : "fica pendente até aprovar"}</span>
+                  <span style={{ display: "block", fontSize: 11, color: t.escopo === "completo" ? "#2563EB" : T.textSm, marginTop: 2 }}>{t.escopo === "completo" ? "todo o hub em leitura" : "só Notas e Relatório"}</span>
                 </div>
                 <div>
                   {label("Vê")}
@@ -247,6 +253,13 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
                 {ENTIDADES_VISUALIZADOR.map(e => <Toggle key={e.id} cor="#2563EB" on={editando.entidades.includes(e.id)} onClick={() => setEditando(s => ({ ...s, entidades: s.entidades.includes(e.id) ? s.entidades.filter(x => x !== e.id) : [...s.entidades, e.id] }))}>{e.label}</Toggle>)}
               </div>
               <span style={{ display: "block", fontSize: 11, color: T.textSm, marginTop: 6 }}>Vale para visualizadores sem entidade própria no perfil. Campeonatos e orçamentos filtram por essas entidades.</span>
+            </div>
+            <div>
+              {label("Dentro dos campeonatos, o visualizador vê")}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {ESCOPOS.map(e => <Toggle key={e.id} cor="#2563EB" on={(editando.escopo || "notas") === e.id} onClick={() => setEditando(s => ({ ...s, escopo: e.id }))}>{e.label}</Toggle>)}
+              </div>
+              <span style={{ display: "block", fontSize: 11, color: T.textSm, marginTop: 6 }}>{ESCOPOS.find(e => e.id === (editando.escopo || "notas"))?.desc}</span>
             </div>
             <div>
               {label("Módulos liberados ao visualizador")}

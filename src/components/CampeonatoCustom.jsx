@@ -32,7 +32,10 @@ import LivemodeLogo from "./LivemodeLogo";
 // Recebe `config` com id, nome, edicao, cor, fases — e tudo que diferencia
 // um campeonato do outro fica nesse objeto. Os jogos seed vêm de
 // initialJogos (definidos no momento da criação no NovoCampeonatoModal).
-export default function CampeonatoCustom({ config, initialJogos = [], initialServicos = [], onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin' }) {
+export default function CampeonatoCustom({ config, initialJogos = [], initialServicos = [], onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin', escopo = 'notas' }) {
+  // Visualizador com escopo 'completo' (time Livemode): vê todas as abas em modo leitura
+  const hubCompleto = role === 'admin' || escopo === 'completo';
+  const modoLeitura = role === 'visualizador' && escopo === 'completo';
   const { id: campId, nome, edicao, cor: PRIMARY, fases, formato = "mata_mata", numRodadas = 0 } = config;
   const { getFase, ordemFase } = makeFaseHelpers(fases);
   const isPC = formato === "pontos_corridos";
@@ -281,8 +284,8 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
 
   const RESUMO_CATS = [...varCalc, ...fixosCalc, ...outrosMensaisCalc];
 
-  const [setor, setSetor]               = useState(() => role === 'visualizador' ? "notas" : "orcamento");
-  const [tab, setTab]                   = useState(() => role === 'visualizador' ? "notas fiscais" : "dashboard");
+  const [setor, setSetor]               = useState(() => !hubCompleto ? "notas" : "orcamento");
+  const [tab, setTab]                   = useState(() => !hubCompleto ? "notas fiscais" : "dashboard");
   const [showNovo, setNovo]             = useState(false);
   const [jogoEdit, setJogoEdit]         = useState(null);
   const [filtroFase, setFiltroFase]     = useState("Todas");
@@ -385,7 +388,7 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
 
   const TABS_ORC  = ["dashboard","serviços","jogos","micro","savings","gráficos"];
   const TABS_NF   = ["notas fiscais","mensal","serviços livemode","rastreabilidade"];
-  const TABS_REL  = role === 'visualizador' ? ["envio"] : ["apresentações","envio"];
+  const TABS_REL  = !hubCompleto ? ["envio"] : ["apresentações","envio"];
   const TABS_LOG  = ["logística"];
   const TABS = setor==="orcamento" ? TABS_ORC : setor==="notas" ? TABS_NF : setor==="logistica" ? TABS_LOG : TABS_REL;
 
@@ -394,7 +397,7 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
     if (s === "orcamento") setTab("dashboard");
     else if (s === "notas") setTab("notas fiscais");
     else if (s === "logistica") setTab("logística");
-    else if (s === "relatorio") setTab(role === 'visualizador' ? "envio" : "apresentações");
+    else if (s === "relatorio") setTab(!hubCompleto ? "envio" : "apresentações");
   };
 
   if (loadError) return (
@@ -416,8 +419,9 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
     // Hub de Fornecedores saiu daqui (13/08/2026): módulo transversal, vive só na Home.
     { k:"relatorio",    l:"Relatório",            icon:ClipboardList },
   ];
-  // Mesmo corte do Brasileirão/Paulistão: visualizador só vê NF + Relatório.
-  const SETORES = role === 'admin' ? SETORES_ALL : [
+  // Mesmo corte do Brasileirão/Paulistão: visualizador só vê NF + Relatório,
+  // salvo escopo 'completo' do time (todo o hub em leitura).
+  const SETORES = hubCompleto ? SETORES_ALL : [
     { k:"notas",     l:"Notas Fiscais", icon:FileText },
     { k:"relatorio", l:"Relatório",     icon:ClipboardList },
   ];
@@ -427,7 +431,7 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
                               + servicos.reduce((t,sec)=>t+sec.itens.reduce((u,i)=>u+(i.orcado||0),0),0);
 
   return (
-    <div className="page-enter" style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
+    <div className={`page-enter${modoLeitura ? " hub-leitura" : ""}`} style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
       <aside style={{
         width:72, minHeight:"100vh",
         background: T.gradSidebar || "linear-gradient(180deg,#0a0f1a,#0f172a)",

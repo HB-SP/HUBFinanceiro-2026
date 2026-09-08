@@ -24,7 +24,7 @@ const TabLivemode      = lazy(() => import("./components/tabs/TabLivemode"));
 const TabLogistica     = lazy(() => import("./components/tabs/TabLogistica"));
 const TabRastreabilidade = lazy(() => import("./components/tabs/TabRastreabilidade"));
 import { NovoJogoModal, NovoRapidoModal } from "./components/modals/NovoJogoModal";
-import { getState, setState as setSupabaseState, supabase, createPersistedSetter, isPersistPending } from "./lib/supabase";
+import { getState, setState as setSupabaseState, supabase, createPersistedSetter, isPersistPending, setModoLeitura } from "./lib/supabase";
 import { lerApresentacoesDoLocalStorage } from "./lib/apresentacoesCalc";
 import { buildRealizadoPorJogo, buildInfraRealizadoPorJogo, marcarLogisticaReembolsada } from "./lib/notasFiscais";
 import { FORNECEDORES_INIT } from "./data/fornecedores";
@@ -34,7 +34,10 @@ import { useAgendaPortal } from "./hooks/useAgendaPortal";
 
 
 // ─── BRASILEIRÃO ──────────────────────────────────────────────────────────────
-function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin', onSignOut }) {
+function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin', escopo = 'notas', onSignOut }) {
+  // Visualizador com escopo 'completo' (time Livemode): vê todas as abas em modo leitura
+  const hubCompleto = role === 'admin' || escopo === 'completo';
+  const modoLeitura = role === 'visualizador' && escopo === 'completo';
   const [jogos, setJogosRaw]       = useState(ALL_JOGOS);
   const [servicos, setServicosRaw] = useState(SERVICOS_INIT);
   const [notas, setNotasRaw]               = useState([]);
@@ -305,8 +308,8 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
 
   const RESUMO_CATS = [...varCalc, ...fixosCalc, ...outrosMensaisCalc];
 
-  const [setor,           setSetor]           = useState(() => role === 'visualizador' ? "notas" : "orcamento");
-  const [tab,             setTab]             = useState(() => role === 'visualizador' ? "notas fiscais" : "dashboard");
+  const [setor,           setSetor]           = useState(() => (role === 'visualizador' && escopo !== 'completo') ? "notas" : "orcamento");
+  const [tab,             setTab]             = useState(() => (role === 'visualizador' && escopo !== 'completo') ? "notas fiscais" : "dashboard");
   const [showNovo,        setNovo]            = useState(false);
   const [novoRapido,      setNovoRapido]      = useState(null);
   const [jogoEdit,        setJogoEdit]        = useState(null);
@@ -411,7 +414,7 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
 
   const TABS_ORC  = ["dashboard","serviços","jogos","micro","savings","gráficos"];
   const TABS_NF   = ["notas fiscais","mensal","serviços livemode","rastreabilidade"];
-  const TABS_REL  = role === 'visualizador' ? ["envio"] : ["apresentações","envio"];
+  const TABS_REL  = !hubCompleto ? ["envio"] : ["apresentações","envio"];
   const TABS_LOG  = ["logística"];
   const TABS = setor === "orcamento" ? TABS_ORC : setor === "notas" ? TABS_NF : setor === "logistica" ? TABS_LOG : TABS_REL;
 
@@ -420,7 +423,7 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
     if (s === "orcamento") setTab("dashboard");
     else if (s === "notas") setTab("notas fiscais");
     else if (s === "logistica") setTab("logística");
-    else if (s === "relatorio") setTab(role === 'visualizador' ? "envio" : "apresentações");
+    else if (s === "relatorio") setTab(!hubCompleto ? "envio" : "apresentações");
   };
 
   if (loadError) return (
@@ -443,7 +446,7 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
     // os campeonatos e vive só na Home.
     {k:"relatorio",    l:"Relatório",            icon:ClipboardList},
   ];
-  const SETORES = role === 'admin' ? SETORES_ALL : [
+  const SETORES = hubCompleto ? SETORES_ALL : [
     {k:"notas",     l:"Notas Fiscais", icon:FileText},
     {k:"relatorio", l:"Relatório",     icon:ClipboardList},
   ];
@@ -451,7 +454,7 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
   const setorAtual = SETORES.find(s => s.k === setor);
 
   return (
-    <div className="page-enter" style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
+    <div className={`page-enter${modoLeitura ? " hub-leitura" : ""}`} style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
 
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <aside style={{
@@ -1003,12 +1006,14 @@ import { logAcao, descreverPagina } from "./lib/audit";
 // Perfil + time: a entidade individual do perfil vence; sem ela, vale a do
 // time (teams.entidades). Módulos transversais liberados ao visualizador vêm
 // do time (teams.modulos); sem time, só Orçamentos.
-const PERFIL_SELECT = 'role, entidade, team_id, teams ( nome, entidades, modulos )';
+const PERFIL_SELECT = 'role, entidade, team_id, teams ( nome, entidades, modulos, escopo )';
 const perfilEfetivo = (data) => {
   const team = data?.teams || null;
   const entidade = data?.entidade || (team?.entidades?.length ? team.entidades.join(',') : null);
   const modulos = team ? (team.modulos || []) : ['orcamentos'];
-  return { role: data?.role ?? 'visualizador', entidade, modulos, teamNome: team?.nome || null };
+  // escopo do visualizador dentro dos campeonatos: 'notas' (só NF + Relatório) ou 'completo' (todo o hub em leitura)
+  const escopo = team?.escopo === 'completo' ? 'completo' : 'notas';
+  return { role: data?.role ?? 'visualizador', entidade, modulos, escopo, teamNome: team?.nome || null };
 };
 import { getState as getStateSb, setState as setStateSb } from "./lib/supabase";
 
@@ -1033,7 +1038,7 @@ function PendentePage({ T, onSignOut }) {
   );
 }
 
-function RoleTestWidget({ roleOverride, entOverride, onOverride, T }) {
+function RoleTestWidget({ roleOverride, entOverride, escOverride, onOverride, T }) {
   const [open, setOpen] = useState(false);
   // Opções de teste: visualizador simula também a entidade (independe da
   // entidade do admin logado); fornecedor não tem entidade.
@@ -1041,10 +1046,11 @@ function RoleTestWidget({ roleOverride, entOverride, onOverride, T }) {
     { role: 'visualizador', ent: 'brasileirao-2026',        label: 'Visualizador — FFU' },
     { role: 'visualizador', ent: 'paulistao-feminino-2026', label: 'Visualizador — FPF' },
     { role: 'visualizador', ent: 'outro',                   label: 'Visualizador — Outro' },
+    { role: 'visualizador', ent: 'outro', esc: 'completo',  label: 'Visualizador — Livemode (hub completo)' },
     { role: 'fornecedor',   ent: null,                      label: 'Fornecedor' },
   ];
   if (roleOverride) {
-    const atual = OPTIONS.find(o => o.role === roleOverride && o.ent === entOverride);
+    const atual = OPTIONS.find(o => o.role === roleOverride && o.ent === entOverride && (o.esc || null) === (escOverride || null));
     return (
       <div style={{ position:'fixed', bottom:16, right:16, zIndex:9999, background:'#F59E0B', color:'#000', borderRadius:8, padding:'6px 14px', fontSize:12, fontWeight:600, fontFamily:"'Poppins',sans-serif", display:'flex', alignItems:'center', gap:10, boxShadow:'0 2px 12px rgba(0,0,0,0.3)' }}>
         Testando: {atual?.label || roleOverride}
@@ -1060,7 +1066,7 @@ function RoleTestWidget({ roleOverride, entOverride, onOverride, T }) {
       {open && (
         <div style={{ position:'absolute', bottom:'calc(100% + 6px)', right:0, background:T.card||T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:'hidden', minWidth:190, boxShadow:'0 4px 16px rgba(0,0,0,0.3)' }}>
           {OPTIONS.map(o => (
-            <button key={o.label} onClick={() => { onOverride(o.role, o.ent); setOpen(false); }} style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', color:T.text, fontSize:12, cursor:'pointer', textAlign:'left', fontFamily:"'Poppins',sans-serif" }}>
+            <button key={o.label} onClick={() => { onOverride(o.role, o.ent, o.esc || null); setOpen(false); }} style={{ display:'block', width:'100%', padding:'9px 14px', background:'none', border:'none', color:T.text, fontSize:12, cursor:'pointer', textAlign:'left', fontFamily:"'Poppins',sans-serif" }}>
               {o.label}
             </button>
           ))}
@@ -1078,6 +1084,7 @@ export default function App() {
   const [role,        setRole]        = useState(null);
   const [entidade,    setEntidade]    = useState(null);
   const [modulos,     setModulos]     = useState(['orcamentos']);   // módulos liberados ao visualizador (do time)
+  const [escopo,      setEscopo]      = useState('notas');          // 'notas' | 'completo' (do time)
   const [authLoading, setAuthLoading] = useState(true);
   const [customCampeonatos, setCustomCampeonatos] = useState([]);
   const [orcamentos, setOrcamentos] = useState([]);   // espelho do orc_registry p/ a Home
@@ -1087,6 +1094,7 @@ export default function App() {
   const [currentHash, setCurrentHash] = useState(window.location.hash);
   const [roleOverride, setRoleOverride] = useState(null);
   const [entOverride,  setEntOverride]  = useState(null); // entidade simulada no "Testar como"
+  const [escOverride,  setEscOverride]  = useState(null); // escopo simulado ('completo' = hub inteiro em leitura)
   const T = darkMode ? DARK : LIGHT;
 
   useEffect(() => {
@@ -1101,7 +1109,7 @@ export default function App() {
         .then(({ data }) => {
           if (mounted) {
             const p = perfilEfetivo(data);
-            setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos);
+            setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos); setEscopo(p.escopo);
           }
         })
         .catch(err => {
@@ -1143,6 +1151,10 @@ export default function App() {
   const signOut = async () => { await logAcao('logout'); await supabase.auth.signOut(); };
   useSessionTimeout(signOut, !!user);
 
+  // Rede de segurança: visualizador (real ou simulado no "Testar como") nunca
+  // grava — setters otimistas e gravações viram no-op no client (lib/supabase).
+  useEffect(() => { setModoLeitura((roleOverride ?? role) === 'visualizador'); }, [role, roleOverride]);
+
   // Audit log de navegação: registra a tela aberta (campeonato, orçamento,
   // módulo, admin). A mesma tela não repete em menos de 60s; a Home não conta.
   const ultimaTelaRef = useRef({ pagina: null, at: 0 });
@@ -1177,7 +1189,7 @@ export default function App() {
         () => {
           // Refaz a leitura com o time (o payload do realtime não traz o join)
           supabase.from('profiles').select(PERFIL_SELECT).eq('id', user.id).single()
-            .then(({ data }) => { const p = perfilEfetivo(data); setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos); })
+            .then(({ data }) => { const p = perfilEfetivo(data); setRole(p.role); setEntidade(p.entidade); setModulos(p.modulos); setEscopo(p.escopo); })
             .catch(() => {});
         }
       )
@@ -1281,9 +1293,10 @@ export default function App() {
 
   const effectiveRole     = roleOverride ?? role;
   const effectiveEntidade = roleOverride ? (entOverride ?? entidade) : entidade;
+  const effectiveEscopo   = roleOverride ? (escOverride ?? 'notas') : escopo;
 
   const roleWidget = role === 'admin' && (
-    <RoleTestWidget roleOverride={roleOverride} entOverride={entOverride} onOverride={(r, ent) => { setRoleOverride(r); setEntOverride(ent ?? null); setPagina("home"); }} T={T}/>
+    <RoleTestWidget roleOverride={roleOverride} entOverride={entOverride} escOverride={escOverride} onOverride={(r, ent, esc) => { setRoleOverride(r); setEntOverride(ent ?? null); setEscOverride(esc ?? null); setPagina("home"); }} T={T}/>
   );
 
   // Fornecedor — só acessa formulário externo
@@ -1304,21 +1317,21 @@ export default function App() {
 
   if(paginaEfetiva==="brasileirao-2026") {
     if (!podeVerCamp('brasileirao-2026')) { setPagina("home"); return null; }
-    return <>{<Brasileirao onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} onSignOut={signOut}/>}{roleWidget}</>;
+    return <>{<Brasileirao onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} escopo={effectiveEscopo} onSignOut={signOut}/>}{roleWidget}</>;
   }
   if(paginaEfetiva==="paulistao-feminino-2026") {
     if (!podeVerCamp('paulistao-feminino-2026')) { setPagina("home"); return null; }
-    return <>{<Paulistao onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} onSignOut={signOut}/>}{roleWidget}</>;
+    return <>{<Paulistao onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} escopo={effectiveEscopo} onSignOut={signOut}/>}{roleWidget}</>;
   }
   if(paginaEfetiva?.startsWith("custom:")) {
     const id = paginaEfetiva.slice(7);
     const config = customCampeonatos.find(c => c.id === id);
     if (config && !podeVerCamp(config.id, config.organizador)) { setPagina("home"); return null; }
-    if (config) return <>{<CampeonatoCustom config={config} onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole}/>}{roleWidget}</>;
+    if (config) return <>{<CampeonatoCustom config={config} onBack={()=>setPagina("home")} onOpenHub={abrirHubFornecedores} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} escopo={effectiveEscopo}/>}{roleWidget}</>;
     setPagina("home");
     return null;
   }
-  if(paginaEfetiva==="hub-fornecedores") return <>{<HubFornecedores onBack={()=>setPagina("home")} filtroInicial={hubFiltro} T={T} darkMode={darkMode} setDarkMode={toggleDark}/>}{roleWidget}</>;
+  if(paginaEfetiva==="hub-fornecedores") return <>{<HubFornecedores onBack={()=>setPagina("home")} filtroInicial={hubFiltro} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole}/>}{roleWidget}</>;
   if(paginaEfetiva==="hub-orcamentos" || paginaEfetiva?.startsWith("orc:")) {
     // "orc:<id>" = card de orçamento da Home → abre o Hub já no orçamento (com trava por entidade)
     const orcId = paginaEfetiva.startsWith("orc:") ? paginaEfetiva.slice(4) : null;

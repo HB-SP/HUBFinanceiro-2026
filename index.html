@@ -132,6 +132,17 @@
         to   { opacity: 1; transform: translateY(0); }
       }
 
+      /* Modo leitura (visualizador com hub completo): células de tabela travadas
+         e um selo fixo lembrando que nada é salvo. Filtros fora de tabela seguem livres. */
+      .hub-leitura table input, .hub-leitura table select, .hub-leitura table textarea,
+      .hub-leitura [contenteditable="true"] { pointer-events: none; opacity: .85; }
+      .hub-leitura::after {
+        content: "Modo leitura — este perfil não edita nem grava";
+        position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+        background: rgba(37,99,235,.92); color: #fff; font: 600 11px/1 'Poppins', sans-serif;
+        letter-spacing: .04em; padding: 8px 14px; border-radius: 999px; z-index: 60;
+        box-shadow: 0 6px 20px rgba(0,0,0,.18); pointer-events: none;
+      }
       .page-enter {
         animation: lm-page-enter var(--duration-enter) var(--ease-out) both;
       }

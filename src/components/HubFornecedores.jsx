@@ -20,7 +20,8 @@ import TabFornecedores from "./tabs/TabFornecedores";
 // Filtro global: "todos" ou id de um campeonato
 const FILTRO_TODOS = "todos";
 
-export default function HubFornecedores({ onBack, T, darkMode, setDarkMode, filtroInicial }) {
+export default function HubFornecedores({ onBack, T, darkMode, setDarkMode, filtroInicial, role = 'admin' }) {
+  const modoLeitura = role === 'visualizador';   // time com módulo liberado: vê tudo, não edita
   const [fornecedores, setFornecedoresRaw] = useState(FORNECEDORES_INIT);
   const [cotacoes,     setCotacoesRaw]     = useState(COTACAO_INIT);
   const [jogos,        setJogosRaw]        = useState(ALL_JOGOS);
@@ -162,7 +163,7 @@ export default function HubFornecedores({ onBack, T, darkMode, setDarkMode, filt
   );
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
+    <div className={modoLeitura ? "hub-leitura" : undefined} style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
 
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <aside style={{

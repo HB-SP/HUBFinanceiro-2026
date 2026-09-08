@@ -102,7 +102,10 @@ const K = {
   fixos_contratos:  "paulistao_fixos_contratos",
 };
 
-export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin', onSignOut }) {
+export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admin', escopo = 'notas', onSignOut }) {
+  // Visualizador com escopo 'completo' (time Livemode): vê todas as abas em modo leitura
+  const hubCompleto = role === 'admin' || escopo === 'completo';
+  const modoLeitura = role === 'visualizador' && escopo === 'completo';
   const [jogos, setJogosRaw]                       = useState(PAULISTAO_JOGOS_INIT);
   const [servicos, setServicosRaw]                 = useState(PAULISTAO_SERVICOS_INIT);
   const [notas, setNotasRaw]                       = useState([]);
@@ -388,8 +391,8 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
 
   const RESUMO_CATS = [...varCalc, ...fixosCalc, ...outrosMensaisCalc];
 
-  const [setor, setSetor]               = useState(() => role === 'visualizador' ? "notas" : "orcamento");
-  const [tab, setTab]                   = useState(() => role === 'visualizador' ? "notas fiscais" : "dashboard");
+  const [setor, setSetor]               = useState(() => !hubCompleto ? "notas" : "orcamento");
+  const [tab, setTab]                   = useState(() => !hubCompleto ? "notas fiscais" : "dashboard");
   const [showNovo, setNovo]             = useState(false);
   const [jogoEdit, setJogoEdit]         = useState(null);
   const [filtroFase, setFiltroFase]     = useState("Todas");
@@ -492,7 +495,7 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
 
   const TABS_ORC  = ["dashboard","serviços","jogos","micro","savings","gráficos"];
   const TABS_NF   = ["notas fiscais","mensal","serviços livemode","rastreabilidade"];
-  const TABS_REL  = role === 'visualizador' ? ["envio"] : ["apresentações","envio"];
+  const TABS_REL  = !hubCompleto ? ["envio"] : ["apresentações","envio"];
   const TABS_LOG  = ["logística"];
   const TABS = setor==="orcamento" ? TABS_ORC : setor==="notas" ? TABS_NF : setor==="logistica" ? TABS_LOG : TABS_REL;
 
@@ -501,7 +504,7 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
     if (s === "orcamento") setTab("dashboard");
     else if (s === "notas") setTab("notas fiscais");
     else if (s === "logistica") setTab("logística");
-    else if (s === "relatorio") setTab(role === 'visualizador' ? "envio" : "apresentações");
+    else if (s === "relatorio") setTab(!hubCompleto ? "envio" : "apresentações");
   };
 
   if (loadError) return (
@@ -523,7 +526,7 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
     // Hub de Fornecedores saiu daqui (13/08/2026): módulo transversal, vive só na Home.
     { k:"relatorio",    l:"Relatório",            icon:ClipboardList },
   ];
-  const SETORES = role === 'admin' ? SETORES_ALL : [
+  const SETORES = hubCompleto ? SETORES_ALL : [
     { k:"notas",     l:"Notas Fiscais", icon:FileText },
     { k:"relatorio", l:"Relatório",     icon:ClipboardList },
   ];
@@ -534,7 +537,7 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
   const orcGlobalVariaveis = jogos.reduce((s,j) => s+subTotal(j.orcado||{}), 0);
 
   return (
-    <div className="page-enter" style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
+    <div className={`page-enter${modoLeitura ? " hub-leitura" : ""}`} style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
       {/* Sidebar */}
       <aside style={{
         width:72, minHeight:"100vh",

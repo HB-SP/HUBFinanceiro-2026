@@ -82,7 +82,23 @@ async function pushBackup(key, valorAtual) {
   }
 }
 
+// ─── MODO LEITURA (visualizador com hub completo) ────────────────────────────
+// Rede de segurança do lado do app: com o modo ligado, nenhuma escrita sai
+// daqui — setters otimistas não mudam o estado local e as gravações viram um
+// aviso no console. O banco já nega escrita de não-admin por RLS; isso evita a
+// UI "andar" e depois voltar. Ligado pelo App conforme o papel efetivo.
+let modoLeitura = false;
+let avisouLeitura = false;
+export function setModoLeitura(on) { modoLeitura = !!on; if (!on) avisouLeitura = false; }
+export function emModoLeitura() { return modoLeitura; }
+function bloqueadoPorLeitura(oQue) {
+  if (!modoLeitura) return false;
+  if (!avisouLeitura) { avisouLeitura = true; console.warn(`Modo leitura: ${oQue} ignorado (perfil visualizador).`); }
+  return true;
+}
+
 export async function setState(key, value) {
+  if (bloqueadoPorLeitura(`gravar ${key}`)) return;
   const atual = await getState(key).catch(() => null);
   if (atual != null) await pushBackup(key, atual);
   const { error } = await comTimeout(supabase.from('app_state').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' }), `gravar ${key}`);
@@ -101,6 +117,7 @@ const rpcIndisponivel = err =>
 // Acrescenta `entry` (objeto ou array de objetos) na lista `key`. Se algum
 // elemento com o mesmo clientRef já estiver lá (reenvio após falha), não grava.
 export async function appendState(key, entry) {
+  if (bloqueadoPorLeitura(`acrescentar em ${key}`)) return;
   const { error } = await comTimeout(supabase.rpc('append_app_state_list', { k: key, entry }), `acrescentar em ${key}`);
   if (!error) return;
   if (!rpcIndisponivel(error)) throw error;
@@ -116,6 +133,7 @@ export async function appendState(key, entry) {
 // false se o item já não estava lá (alguém decidiu antes) — quem chama usa
 // isso pra não repetir efeitos colaterais (ex.: criar a nota duas vezes).
 export async function removeFromStateList(key, id) {
+  if (bloqueadoPorLeitura(`remover de ${key}`)) return false;
   const { data, error } = await comTimeout(supabase.rpc('remove_app_state_list', { k: key, item_id: String(id) }), `remover de ${key}`);
   if (!error) return data === true;
   if (!rpcIndisponivel(error)) throw error;
@@ -184,6 +202,7 @@ export function createPersistedSetter(key, setRaw, persistRefs, { empty = [], de
     });
   };
   return fn => {
+    if (bloqueadoPorLeitura(`editar ${key}`)) return;   // UI não anda: nada muda no local nem no banco
     setRaw(prev => (typeof fn === "function" ? fn(prev) : fn));
     s.pending.push(fn);
     if (debounceMs > 0) {
