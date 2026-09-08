@@ -4,7 +4,7 @@ import { logAcao } from "../../lib/audit";
 import { ENTIDADES_VISUALIZADOR } from "../../config/entities";
 import { FONT, RADIUS } from "../../constants";
 import { Button, Badge } from "../ui";
-import { Plus, Trash2, Check, X, Users, Globe, Shield, Layers, Pencil } from "lucide-react";
+import { Plus, Trash2, Check, X, Users, Globe, Shield, Layers, Pencil, UserMinus } from "lucide-react";
 
 // ─── TIMES ────────────────────────────────────────────────────────────────────
 // Time = grupo de usuários por domínio de e-mail. Define o que o time vê
@@ -87,6 +87,13 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
     load(); onUsersChanged && onUsersChanged();
   };
 
+  const desvincular = async (u, t) => {
+    if (!window.confirm(`Tirar ${u.nome || u.email} do time ${t.nome}? O perfil e a entidade individual não mudam.`)) return;
+    const { error } = await supabase.from("profiles").update({ team_id: null }).eq("id", u.id);
+    if (error) { setErro(error.message); return; }
+    await logAcao("team_change", { team_id: null, team: null, de: t.nome }, u.id);
+    onUsersChanged && onUsersChanged();
+  };
   const vincular = async (u, t) => {
     const { error } = await supabase.from("profiles").update({ team_id: t.id }).eq("id", u.id);
     if (error) { setErro(error.message); return; }
@@ -176,6 +183,35 @@ export default function TabTimes({ T, users = [], onUsersChanged }) {
                   </div>
                 </div>
               </div>
+              {/* Membros do time */}
+              {(() => {
+                const lista = users.filter(u => u.team_id === t.id).sort((a, b) => (a.nome || a.email || "").localeCompare(b.nome || b.email || "", "pt-BR"));
+                const ROLE_COR = { admin: "#16A34A", visualizador: "#2563EB", fornecedor: "#D97706", pendente: "#9333EA" };
+                return (
+                  <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 10 }}>
+                    {label(`Membros (${lista.length})`)}
+                    {lista.length === 0 ? <span style={{ fontSize: 12, color: T.textSm }}>nenhum usuário vinculado</span> : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 220, overflowY: "auto" }}>
+                        {lista.map(u => (
+                          <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 6px", borderRadius: 6, background: T.surfaceAlt || T.bg }}>
+                            <span style={{ width: 7, height: 7, borderRadius: "50%", background: ROLE_COR[u.role] || "#6B7280", flexShrink: 0 }} title={u.role}/>
+                            <span style={{ color: T.text, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }} title={u.email}>
+                              {u.nome || u.email}
+                              {u.nome && <span style={{ color: T.textSm, fontWeight: 400 }}> · {u.email}</span>}
+                            </span>
+                            <span style={{ fontSize: 10, color: ROLE_COR[u.role] || T.textSm, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", flexShrink: 0 }}>{u.role}</span>
+                            <button title="Tirar do time" onClick={() => desvincular(u, t)}
+                              style={{ border: "none", background: "transparent", color: T.textSm, cursor: "pointer", padding: 2, display: "flex", flexShrink: 0 }}
+                              onMouseEnter={e => e.currentTarget.style.color = T.danger || "#DC2626"} onMouseLeave={e => e.currentTarget.style.color = T.textSm}>
+                              <UserMinus size={13}/>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ))}
           {teams.length === 0 && <p style={{ color: T.textMd, fontSize: 13 }}>Nenhum time ainda.</p>}
