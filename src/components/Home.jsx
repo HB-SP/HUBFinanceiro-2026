@@ -1,6 +1,8 @@
 import { CAMPEONATOS, RADIUS, FONT } from "../constants";
 import { getChampionshipConfig } from "../config/championships";
-import { CAMPEONATO_ENTITIES, getEntity, podeVerCampeonato } from "../config/entities";
+import { CAMPEONATO_ENTITIES, ENTIDADES_VISUALIZADOR, getEntity, podeVerCampeonato } from "../config/entities";
+import { ORC_STATUS, podeVerOrcamento } from "../data/orcamentos";
+import { fmt } from "../utils";
 import ChampionshipLogo from "./ChampionshipLogo";
 import EntityLogo, { EntityLogoStack } from "./EntityLogo";
 import LivemodeLogo from "./LivemodeLogo";
@@ -219,10 +221,121 @@ function ChampCard({ camp, onEnter, onDelete, T }) {
   );
 }
 
-export default function Home({ onEnter, onOpenHub, T, darkMode, setDarkMode, customCampeonatos = [], onCriarCampeonato, onExcluirCampeonato, role = 'admin', entidade = null, onSignOut }) {
+// ── Card de orçamento (proposta pré-campeonato) — mesmo desenho do ChampCard ──
+function OrcCard({ reg, onEnter, readOnly, T }) {
+  const st = ORC_STATUS[reg.status] || ORC_STATUS.rascunho;
+  const orgLabel = ENTIDADES_VISUALIZADOR.find(e => e.id === reg.organizador)?.label?.split(" - ")[0] || null;
+  const cor = reg.cor || T.brand || "#65B32E";
+  return (
+    <div className="lm-card-hover" style={{
+      background: T.surface || T.card,
+      borderRadius: RADIUS.lg,
+      border: `1px solid ${T.border}`,
+      borderTop: `3px solid ${cor}`,
+      padding: 22,
+      cursor: "pointer",
+      position: "relative",
+      overflow: "hidden",
+      minHeight: 240,
+      display: "flex",
+      flexDirection: "column",
+      gap: 18,
+      boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)",
+    }} onClick={onEnter}>
+      <div style={{ display:"flex", alignItems:"center", gap: 14, minWidth: 0 }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+          background: `${cor}18`, border: `1px solid ${cor}44`,
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
+        }}>{reg.icon || "🏆"}</div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h4 style={{
+            margin: "0 0 2px",
+            fontFamily: FONT.display,
+            fontSize: 22,
+            fontWeight: 700,
+            color: T.text,
+            letterSpacing: "-0.005em",
+            lineHeight: 1.1,
+          }}>{reg.nome}</h4>
+          <p style={{ margin: 0, fontSize: 11, color: T.textSm, fontFamily: FONT.ui }}>
+            {orgLabel && <>{orgLabel} · </>}
+            {reg.edicao} · Orçamento
+          </p>
+        </div>
+      </div>
+
+      <span style={{
+        background: `${st.color}18`,
+        border: `1px solid ${st.color}55`,
+        color: st.color,
+        borderRadius: RADIUS.pill,
+        padding: "0 10px",
+        height: 22,
+        fontSize: 10,
+        fontWeight: 600,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        display: "inline-flex",
+        alignSelf: "flex-start",
+        alignItems: "center",
+        gap: 6,
+        marginTop: -8,
+        fontFamily: FONT.ui,
+      }}>
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: st.color, display: "inline-block" }}/>
+        {st.label}
+      </span>
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 16,
+        paddingBottom: 16,
+        borderBottom: `1px solid ${T.border}`,
+      }}>
+        <StatBlock label="Total estimado" value={fmt(reg.totalEstimado || 0)} T={T}/>
+        <StatBlock label="Jogos" value={reg.numJogos || 0} T={T} hint="estimados"/>
+      </div>
+
+      <div style={{ flex: 1 }}/>
+
+      <button
+        onClick={e => { e.stopPropagation(); onEnter(); }}
+        style={{
+          background: T.brand || "#65B32E",
+          border: "1px solid transparent",
+          color: "#fff",
+          borderRadius: 7,
+          height: 36,
+          cursor: "pointer",
+          fontFamily: FONT.ui,
+          fontWeight: 500,
+          fontSize: 12,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = T.brandStrong || "#5aa327"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = T.brand || "#65B32E"; }}
+      >
+        {readOnly ? "Ver orçamento" : "Abrir orçamento"} <ArrowRight size={14} strokeWidth={2.25}/>
+      </button>
+    </div>
+  );
+}
+
+export default function Home({ onEnter, onOpenHub, T, darkMode, setDarkMode, customCampeonatos = [], orcamentos = [], onCriarCampeonato, onExcluirCampeonato, role = 'admin', entidade = null, onSignOut }) {
   // entidade pode ter múltiplos valores separados por vírgula (definidos pelo admin)
   const campVisiveis = CAMPEONATOS.filter(c => podeVerCampeonato(role, entidade, c.id));
   const customVisiveis = customCampeonatos.filter(c => podeVerCampeonato(role, entidade, c.id, c.organizador));
+  // Orçamentos (propostas pré-campeonato) visíveis para esta entidade — mesma
+  // regra dos campeonatos custom, pelo organizador do orçamento.
+  const orcVisiveis = orcamentos
+    .filter(r => podeVerOrcamento(role, entidade, r.organizador))
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
 
   const totalAtivos = campVisiveis.filter(c => !c.emBreve).length + customVisiveis.filter(c => c.status === "Em andamento").length;
 
@@ -421,6 +534,45 @@ export default function Home({ onEnter, onOpenHub, T, darkMode, setDarkMode, cus
             </div>
           </button>}
         </div>
+
+        {/* ── Orçamentos (propostas pré-campeonato) ───────────────── */}
+        {orcVisiveis.length > 0 && (
+          <>
+            <div style={{ marginTop: 44, marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3 style={{
+                  margin: 0,
+                  fontFamily: FONT.display,
+                  fontSize: 20,
+                  color: T.text,
+                  fontWeight: 700,
+                  letterSpacing: "-0.005em",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}>
+                  <Calculator size={18} color={T.brand || "#65B32E"} strokeWidth={2.25}/>
+                  Orçamentos
+                </h3>
+                <p style={{ color: T.textSm, fontSize: 11, margin: "2px 0 0", fontFamily: FONT.ui }}>
+                  {orcVisiveis.length} {orcVisiveis.length === 1 ? "orçamento proposto" : "orçamentos propostos"} para a próxima edição
+                </p>
+              </div>
+              {role === 'admin' && (
+                <Button T={T} variant="secondary" size="sm" icon={ArrowRight} onClick={() => onEnter("hub-orcamentos")}>
+                  Hub de Orçamentos
+                </Button>
+              )}
+            </div>
+            <div className="stagger" style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))",
+              gap: 18,
+            }}>
+              {orcVisiveis.map(r => <OrcCard key={r.id} reg={r} T={T} onEnter={() => onEnter(`orc:${r.id}`)} readOnly={role !== 'admin'}/>)}
+            </div>
+          </>
+        )}
 
         {/* ── Módulos Transversais ────────────────────────────────── */}
         {role !== 'visualizador' && <div style={{ marginTop: 44, marginBottom: 14 }}>

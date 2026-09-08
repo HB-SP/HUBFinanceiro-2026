@@ -28,7 +28,12 @@ const SUBTABS = [
   { key:"resumo",      label:"Resumo",              icon:LineChart },
 ];
 
-function SubTabNav({ active, onChange, T }) {
+// Visualizador (entidade) vê só o que é proposta: valores por jogo, fixos,
+// comparativo com a edição anterior e resumo. Configuração, premissas e
+// praças são engenharia interna de custo.
+const SUBTABS_VIEWER = ["resumo", "jogos", "servicos", "comparativo"];
+
+function SubTabNav({ active, onChange, T, tabs = SUBTABS }) {
   return (
     <div style={{
       display:"flex",
@@ -40,7 +45,7 @@ function SubTabNav({ active, onChange, T }) {
       borderRadius:RADIUS.md,
       flexWrap:"wrap",
     }}>
-      {SUBTABS.map(({key, label, icon:Icon}) => {
+      {tabs.map(({key, label, icon:Icon}) => {
         const on = active === key;
         return (
           <button
@@ -83,7 +88,8 @@ export default function OrcamentoEditor({
   const [orc, setOrcRaw]         = useState(null);
   const [eventos, setEventosRaw] = useState([]);
   const [loading, setLoading]    = useState(true);
-  const [sub, setSub]            = useState("config");
+  const [sub, setSub]            = useState(canEdit ? "config" : "resumo");
+  const tabs = useMemo(() => canEdit ? SUBTABS : SUBTABS.filter(t => SUBTABS_VIEWER.includes(t.key)), [canEdit]);
   const [showAprovar, setShowAprovar] = useState(false);
   const persistRefs = useRef({}).current;
   const mirrorRef   = useRef(null);
@@ -132,7 +138,7 @@ export default function OrcamentoEditor({
 
   // Espelha totais/status no registry (debounce próprio; só quando mudou)
   useEffect(() => {
-    if (!orc || loading) return;
+    if (!orc || loading || !canEdit) return;   // visualizador é só-leitura (RLS negaria a escrita)
     const t = setTimeout(() => {
       const resumo = resumoRegistry(orc);
       const j = JSON.stringify(resumo);
@@ -210,7 +216,7 @@ export default function OrcamentoEditor({
 
   return (
     <>
-      <SubTabNav active={sub} onChange={setSub} T={T}/>
+      <SubTabNav active={sub} onChange={setSub} T={T} tabs={tabs}/>
 
       {sub === "config"    && <SubConfiguracao {...commonProps} eventos={eventos} onMudarStatus={mudarStatus} onAbrirCampeonato={onAbrirCampeonato}/>}
       {sub === "premissas" && <SubPremissas {...commonProps}/>}

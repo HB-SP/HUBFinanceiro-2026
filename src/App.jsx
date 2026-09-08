@@ -997,6 +997,7 @@ import CampeonatoCustom from "./components/CampeonatoCustom";
 import { NovoCampeonatoModal } from "./components/modals/NovoCampeonatoModal";
 import { REGISTRY_KEY } from "./data/customCampeonato";
 import { ENTIDADES_VISUALIZADOR, podeVerCampeonato } from "./config/entities";
+import { ORC_REGISTRY_KEY, podeVerOrcamento } from "./data/orcamentos";
 import { getState as getStateSb, setState as setStateSb } from "./lib/supabase";
 
 function PendentePage({ T, onSignOut }) {
@@ -1066,6 +1067,7 @@ export default function App() {
   const [entidade,    setEntidade]    = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [customCampeonatos, setCustomCampeonatos] = useState([]);
+  const [orcamentos, setOrcamentos] = useState([]);   // espelho do orc_registry p/ a Home
   const [showNovoCampModal, setShowNovoCampModal] = useState(false);
   const [authError, setAuthError] = useState("");
   const [roleError, setRoleError] = useState(false);
@@ -1166,6 +1168,23 @@ export default function App() {
     return () => { mounted = false; };
   }, [user]);
 
+  // Registry de orçamentos (orc_registry): alimenta os cards de "Orçamentos"
+  // na Home — leitura + realtime; a escrita fica toda no HubOrcamentos.
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    getStateSb(ORC_REGISTRY_KEY).then(arr => {
+      if (mounted && Array.isArray(arr)) setOrcamentos(arr);
+    }).catch(() => {});
+    const channel = supabase
+      .channel("home_orc_registry")
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "app_state", filter: `key=eq.${ORC_REGISTRY_KEY}` }, payload => {
+        if (mounted && Array.isArray(payload.new?.value)) setOrcamentos(payload.new.value);
+      })
+      .subscribe();
+    return () => { mounted = false; supabase.removeChannel(channel); };
+  }, [user]);
+
   const criarCampeonato = async ({ config, jogos, servicos }) => {
     // 1) Persiste estado inicial dos buckets do novo campeonato
     await Promise.all([
@@ -1243,8 +1262,9 @@ export default function App() {
   // Fornecedor — só acessa formulário externo
   if (effectiveRole === 'fornecedor') return <>{<FornecedorPage T={T} onSignOut={roleOverride ? () => { setRoleOverride(null); setEntOverride(null); } : signOut}/>}{roleWidget}</>;
 
-  // Visualizador não acessa os módulos transversais
-  const paginaEfetiva = (effectiveRole === 'visualizador' && (pagina === 'hub-fornecedores' || pagina === 'hub-orcamentos')) ? 'home' : pagina;
+  // Visualizador não acessa o Hub de Fornecedores; Orçamentos ele acessa
+  // filtrado pela entidade (só-leitura), como nos campeonatos.
+  const paginaEfetiva = (effectiveRole === 'visualizador' && pagina === 'hub-fornecedores') ? 'home' : pagina;
 
   // Bloqueio por entidade para visualizador (aceita múltiplas separadas por vírgula)
   const podeVerCamp = (campId, organizador = null) =>
@@ -1267,7 +1287,15 @@ export default function App() {
     return null;
   }
   if(paginaEfetiva==="hub-fornecedores") return <>{<HubFornecedores onBack={()=>setPagina("home")} filtroInicial={hubFiltro} T={T} darkMode={darkMode} setDarkMode={toggleDark}/>}{roleWidget}</>;
-  if(paginaEfetiva==="hub-orcamentos") return <>{<HubOrcamentos onBack={()=>setPagina("home")} onEnter={setPagina} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} user={user} onCriarCampeonato={criarCampeonato} customCampeonatos={customCampeonatos}/>}{roleWidget}</>;
+  if(paginaEfetiva==="hub-orcamentos" || paginaEfetiva?.startsWith("orc:")) {
+    // "orc:<id>" = card de orçamento da Home → abre o Hub já no orçamento (com trava por entidade)
+    const orcId = paginaEfetiva.startsWith("orc:") ? paginaEfetiva.slice(4) : null;
+    if (orcId) {
+      const reg = orcamentos.find(r => r.id === orcId);
+      if (reg && !podeVerOrcamento(effectiveRole, effectiveEntidade, reg.organizador)) { setPagina("home"); return null; }
+    }
+    return <>{<HubOrcamentos key={orcId || "lista"} onBack={()=>setPagina("home")} onEnter={setPagina} T={T} darkMode={darkMode} setDarkMode={toggleDark} role={effectiveRole} entidade={effectiveEntidade} initialId={orcId} user={user} onCriarCampeonato={criarCampeonato} customCampeonatos={customCampeonatos}/>}{roleWidget}</>;
+  }
   if(paginaEfetiva==="admin-usuarios" && role==='admin') return <AdminUsuarios onBack={()=>setPagina("home")} T={T} darkMode={darkMode} setDarkMode={toggleDark} onSignOut={signOut} currentUser={user}/>;
   return (
     <>
@@ -1276,6 +1304,7 @@ export default function App() {
         onOpenHub={abrirHubFornecedores}
         T={T} darkMode={darkMode} setDarkMode={toggleDark}
         customCampeonatos={customCampeonatos}
+        orcamentos={orcamentos}
         role={effectiveRole}
         entidade={effectiveEntidade}
         onSignOut={signOut}

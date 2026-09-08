@@ -14,6 +14,13 @@ import { CATS } from "../constants";
 import { allSubKeysPaulistao, PAULISTAO_SERVICOS_INIT } from "./paulistao";
 import { SERVICOS_INIT } from "../data";
 import { slugify } from "./customCampeonato";
+import { podeVerCampeonato } from "../config/entities";
+
+// Visibilidade do orçamento para o visualizador: mesma regra dos campeonatos
+// custom — dono = meta.organizador (FFU/FPF); sem organizador ou "outro" só
+// aparece para admin e para visualizador "outro"/sem entidade.
+export const podeVerOrcamento = (role, entidadeStr, organizador) =>
+  podeVerCampeonato(role, entidadeStr, "orcamento", organizador || null);
 
 export const ORC_REGISTRY_KEY = "orc_registry";
 export const orcKey        = (id) => `orc_${id}`;
@@ -380,6 +387,7 @@ export const resumoRegistry = (orc) => {
     icon: orc.meta.icon,
     cor: orc.meta.cor,
     status: orc.meta.status,
+    organizador: orc.meta.organizador || null,   // filtro de visibilidade por entidade (Home / Hub)
     totalEstimado: totalGeral,
     numJogos: (orc.jogos || []).length,
     campeonatoCriadoId: orc.meta.campeonatoCriadoId || null,

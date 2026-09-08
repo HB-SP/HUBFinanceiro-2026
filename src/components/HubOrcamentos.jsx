@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { RADIUS, FONT, CAMPEONATOS } from "../constants";
 import { getState, setState as setSupabaseState, supabase, createPersistedSetter, isPersistPending, appendState } from "../lib/supabase";
-import { ORC_REGISTRY_KEY, orcKey, orcEventosKey, ORC_STATUS } from "../data/orcamentos";
+import { ORC_REGISTRY_KEY, orcKey, orcEventosKey, ORC_STATUS, podeVerOrcamento } from "../data/orcamentos";
 import { fmt, fmtK } from "../utils";
 import { Stat, Badge, Button, IconButton } from "./ui";
 import LivemodeLogo from "./LivemodeLogo";
@@ -18,13 +18,13 @@ import OrcamentoEditor from "./orcamentos/OrcamentoEditor";
 // aprovar, o campeonato custom é criado pelo criarCampeonato do App.
 export default function HubOrcamentos({
   onBack, onEnter, T, darkMode, setDarkMode,
-  role, user, onCriarCampeonato, customCampeonatos = [],
+  role, entidade = null, initialId = null, user, onCriarCampeonato, customCampeonatos = [],
 }) {
   const [registry,  setRegistryRaw] = useState([]);
   const [loading,   setLoading]     = useState(true);
   const [loadError, setLoadError]   = useState(null);
   const [ocultar,   setOcultar]     = useState(false);
-  const [selId,     setSelId]       = useState(null);
+  const [selId,     setSelId]       = useState(initialId);   // aberto direto de um card da Home
   const [showNovo,  setShowNovo]    = useState(false);
   const persistRefs = useRef({}).current;
 
@@ -35,7 +35,7 @@ export default function HubOrcamentos({
       try {
         const reg = await getState(ORC_REGISTRY_KEY);
         if (reg) setRegistryRaw(reg);
-        else await setSupabaseState(ORC_REGISTRY_KEY, []);
+        else if (role === "admin") await setSupabaseState(ORC_REGISTRY_KEY, []);
         setLoading(false);
         setLoadError(null);
       } catch (err) {
@@ -69,13 +69,19 @@ export default function HubOrcamentos({
     [idsExistentesCamp, registry]
   );
 
+  // Visualizador só vê os orçamentos da sua entidade (organizador do orçamento)
+  const registryVisivel = useMemo(
+    () => registry.filter(r => podeVerOrcamento(role, entidade, r.organizador)),
+    [registry, role, entidade]
+  );
+
   const kpis = useMemo(() => ({
-    total: registry.length,
-    rascunhos: registry.filter(r => r.status === "rascunho").length,
-    emRevisao: registry.filter(r => r.status === "em_revisao").length,
-    aprovados: registry.filter(r => r.status === "aprovado").length,
-    somaEstimada: registry.reduce((s, r) => s + (Number(r.totalEstimado) || 0), 0),
-  }), [registry]);
+    total: registryVisivel.length,
+    rascunhos: registryVisivel.filter(r => r.status === "rascunho").length,
+    emRevisao: registryVisivel.filter(r => r.status === "em_revisao").length,
+    aprovados: registryVisivel.filter(r => r.status === "aprovado").length,
+    somaEstimada: registryVisivel.reduce((s, r) => s + (Number(r.totalEstimado) || 0), 0),
+  }), [registryVisivel]);
 
   const criarOrcamento = async (doc) => {
     await setSupabaseState(orcKey(doc.id), doc);
@@ -112,7 +118,7 @@ export default function HubOrcamentos({
     </div>
   );
 
-  const regSel = selId ? registry.find(r => r.id === selId) : null;
+  const regSel = selId ? registryVisivel.find(r => r.id === selId) : null;
 
   return (
     <div style={{minHeight:"100vh",background:T.bg,color:T.text,fontFamily:"'Poppins',sans-serif",display:"flex"}}>
@@ -209,7 +215,9 @@ export default function HubOrcamentos({
                   {regSel ? (
                     <>Editando <span style={{color:regSel.cor||T.brand,fontWeight:700}}>{regSel.nome} {regSel.edicao}</span></>
                   ) : (
-                    <>Construção de orçamentos pré-campeonato — padrões, premissas, praças e logística por faixa</>
+                    canEdit
+                      ? <>Construção de orçamentos pré-campeonato — padrões, premissas, praças e logística por faixa</>
+                      : <>Orçamentos propostos para a sua entidade — valores por jogo, serviços fixos e comparativo com a edição anterior</>
                   )}
                 </p>
               </div>
@@ -256,7 +264,7 @@ export default function HubOrcamentos({
             />
           ) : (
             <ListaOrcamentos
-              registry={registry}
+              registry={registryVisivel}
               T={T}
               canEdit={canEdit}
               onSelecionar={setSelId}
