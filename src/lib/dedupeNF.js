@@ -85,6 +85,27 @@ export function chavesEmEnvios(envios) {
 // notas_mensais do anon, então a comparação roda num RPC security definer
 // (migration 20260821000000_nf_duplicada_check) que devolve só {dup, motivo}.
 // null = checagem indisponível (RPC ausente/erro) — quem chama NÃO bloqueia.
+// Mesmo ARQUIVO já anexado em outra nota (qualquer lista/campeonato) — RPC
+// nf_arquivo_ja_anexado (migration 20260909500000). Devolve [] se não houver.
+export async function nfArquivoJaAnexado(fileHash) {
+  if (!fileHash) return [];
+  const { data, error } = await supabase.rpc("nf_arquivo_ja_anexado", { p_hash: fileHash });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+// true = pode salvar (sem repetição, ou o operador confirmou). `verificacao` é o
+// objeto que o AnexoNF entrega em onVerificacao: { hash, matches }.
+export function confirmarArquivoRepetido(verificacao, oQue = "salvar esta NF") {
+  const matches = verificacao?.matches || [];
+  if (!matches.length) return true;
+  const linhas = matches.slice(0, 5).map(m => `• NF ${m.numeroNF || "s/nº"} · ${m.fornecedor || "?"}${m.jogoLabel ? ` · ${m.jogoLabel}` : m.mesLabel ? ` · ${m.mesLabel}` : ""}`);
+  return window.confirm(
+    `⚠️ ESTE PDF JÁ ESTÁ ANEXADO EM OUTRA NOTA\n\n${linhas.join("\n")}\n\n` +
+    `Se esta NF é de outro fornecedor ou outro jogo, o arquivo provavelmente está errado.\n\nTem certeza que quer ${oQue} com este arquivo?`
+  );
+}
+
 export async function nfDuplicadaServidor(escopo, { fornecedor, numeroNF, fileHash }) {
   try {
     const { data, error } = await supabase.rpc("nf_duplicada", {

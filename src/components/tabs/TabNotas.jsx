@@ -1,3 +1,5 @@
+import AnexoNF from "../AnexoNF";
+import { confirmarArquivoRepetido } from "../../lib/dedupeNF";
 import { patchNumeroNF } from "../../lib/nfNumero";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { KPI, Pill } from "../shared";
@@ -181,6 +183,7 @@ function RegistrarNFModal({ jogosRodada, notasExistentes, fornecedores, onSave, 
   // selecionados: { "jogoId_subKey": valor }
   const [selecionados, setSelecionados] = useState({});
   const [arquivo, setArquivo] = useState(null);
+  const [avisoArquivo, setAvisoArquivo] = useState(null);   // { hash, matches } do AnexoNF — arquivo já em outra nota?
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
   const set = (k, v) => setForm(f => ({...f, [k]: v}));
@@ -294,6 +297,7 @@ function RegistrarNFModal({ jogosRodada, notasExistentes, fornecedores, onSave, 
   const handleSave = async () => {
     if (!form.numeroNF && !form.fornecedor) return;
     if (selKeys.length === 0) return;
+    if (arquivo && !confirmarArquivoRepetido(avisoArquivo, "registrar esta NF")) return;   // mesmo PDF já em outra nota
     setUploading(true);
     const notaId = Date.now();
     let hasFile = false, fileHash = null;
@@ -446,19 +450,7 @@ function RegistrarNFModal({ jogosRodada, notasExistentes, fornecedores, onSave, 
         </div>
 
         {/* Upload de arquivo */}
-        <div style={{marginBottom:16}}>
-          <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Arquivo da NF (PDF/imagem)</label>
-          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={e => setArquivo(e.target.files[0] || null)} style={{display:"none"}}/>
-          <div onClick={() => fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => {e.preventDefault(); setArquivo(e.dataTransfer.files[0] || null);}}
-            style={{border:`2px dashed ${arquivo?'#22c55e':T.muted}`,borderRadius:8,padding:"14px 16px",cursor:"pointer",textAlign:"center",
-              background:arquivo?"#22c55e11":T.bg,transition:"all 0.2s"}}>
-            {arquivo
-              ? <p style={{margin:0,color:"#22c55e",fontSize:13,fontWeight:600}}>{arquivo.name} ({(arquivo.size/1024).toFixed(0)} KB)</p>
-              : <p style={{margin:0,color:T.textSm,fontSize:12}}>Clique ou arraste o arquivo aqui</p>}
-          </div>
-        </div>
+        <AnexoNF arquivo={arquivo} setArquivo={setArquivo} T={T} onVerificacao={setAvisoArquivo}/>
 
         {/* Código gerado */}
         {(form.numeroNF || totalNF > 0) && (
@@ -492,6 +484,7 @@ function NFAvulsaModal({ jogos, fornecedores, onSave, onClose, T }) {
     numeroNF: "", fornecedor: "", valorNF: 0, dataEmissao: "", dataEnvio: "", obs: "", descricao: "",
   });
   const [arquivo, setArquivo] = useState(null);
+  const [avisoArquivo, setAvisoArquivo] = useState(null);   // { hash, matches } do AnexoNF — arquivo já em outra nota?
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
   const set = (k, v) => setForm(f => ({...f, [k]: v}));
@@ -500,6 +493,7 @@ function NFAvulsaModal({ jogos, fornecedores, onSave, onClose, T }) {
 
   const handleSave = async () => {
     if (!jogo || (!form.numeroNF && !form.fornecedor)) return;
+    if (arquivo && !confirmarArquivoRepetido(avisoArquivo, "registrar esta NF")) return;   // mesmo PDF já em outra nota
     setUploading(true);
     const notaId = Date.now();
     let hasFile = false, fileHash = null;
@@ -576,19 +570,7 @@ function NFAvulsaModal({ jogos, fornecedores, onSave, onClose, T }) {
         </div>
 
         {/* Upload */}
-        <div style={{marginBottom:16}}>
-          <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Arquivo da NF (PDF/imagem)</label>
-          <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" onChange={e => setArquivo(e.target.files[0] || null)} style={{display:"none"}}/>
-          <div onClick={() => fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => {e.preventDefault(); setArquivo(e.dataTransfer.files[0] || null);}}
-            style={{border:`2px dashed ${arquivo?'#22c55e':T.muted}`,borderRadius:8,padding:"14px 16px",cursor:"pointer",textAlign:"center",
-              background:arquivo?"#22c55e11":T.bg}}>
-            {arquivo
-              ? <p style={{margin:0,color:"#22c55e",fontSize:13,fontWeight:600}}>{arquivo.name} ({(arquivo.size/1024).toFixed(0)} KB)</p>
-              : <p style={{margin:0,color:T.textSm,fontSize:12}}>Clique ou arraste o arquivo aqui</p>}
-          </div>
-        </div>
+        <AnexoNF arquivo={arquivo} setArquivo={setArquivo} T={T} onVerificacao={setAvisoArquivo}/>
 
         {(form.numeroNF || parseValorBR(form.valorNF) > 0) && (
           <div style={{background:T.bg,borderRadius:8,padding:"12px 16px",marginBottom:16}}>
