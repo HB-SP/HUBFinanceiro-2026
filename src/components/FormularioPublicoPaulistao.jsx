@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Sun, Moon } from "lucide-react";
 import { DateInput } from "./ui";
-import { getState, appendState, fileToDataUrl, saveNFFile, hashDataUrl } from "../lib/supabase";
+import { getState, appendState, fileToDataUrl, saveNFFile, hashDataUrl, publicoJogos, publicoFornecedores } from "../lib/supabase";
 import { nfDuplicadaServidor } from "../lib/dedupeNF";
 
 // Mensagem quando o servidor acusa que esta NF já entrou antes (mesmo
@@ -635,11 +635,14 @@ export default function FormularioPublicoPaulistao() {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    Promise.all([getState('paulistao_jogos'), getState('fornecedores')]).then(([j, f]) => {
-      if (j) setJogos(j);
-      if (f) setFornecedores(f);
-      setLoading(false);
-    });
+    // Caminho público sem PII/valores (RPC); se a RPC falhar, cai no caminho antigo
+    Promise.all([publicoJogos('paulistao_jogos'), publicoFornecedores('fornecedores')])
+      .catch(() => Promise.all([getState('paulistao_jogos'), getState('fornecedores')]))
+      .then(([j, f]) => {
+        if (j) setJogos(j);
+        if (f) setFornecedores(f);
+        setLoading(false);
+      });
   }, []);
 
   // Só jogos liberados pelo operador (botão na aba Notas Fiscais) aparecem aqui —

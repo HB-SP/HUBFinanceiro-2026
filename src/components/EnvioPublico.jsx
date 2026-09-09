@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { zip } from "fflate";
-import { getState, setState, getNFFile } from "../lib/supabase";
+import { getState, setState, getNFFile, publicoEnvio, publicoNFFile, publicoEnvioMarcarPago, publicoEnvioStatusNota } from "../lib/supabase";
 import { countNotasFiscais, getEnvioMetricas } from "../lib/notasFiscais";
 import { CheckCircle2, Clock, Printer, Download, Radio } from "lucide-react";
 
@@ -45,16 +45,40 @@ export default function EnvioPublico({ numero, envioRef }) {
   const { stateKey, target } = parseEnvioRef(envioRef ?? numero);
   const dedupeNotasPorNF = stateKey === "paulistao_envios";
 
+  // Token do link = `target` (links gerados pelo Hub sempre carregam publicToken).
+  // Caminho novo: o servidor valida o token e devolve só este envio. Links
+  // antigos por id/número caem no caminho legado enquanto ele existir.
+  const ehToken = !!target && !target.startsWith("id:") && !/^\d+$/.test(String(target));
   useEffect(() => {
-    getState(stateKey).then(ev => {
-      setEnvio((ev || []).find(e => envioMatches(e, target)) || null);
+    (async () => {
+      try {
+        if (ehToken) {
+          const r = await publicoEnvio(target);
+          if (r?.envio) { setEnvio(r.envio); setLoading(false); return; }
+        }
+        const ev = await getState(stateKey);
+        setEnvio((ev || []).find(e => envioMatches(e, target)) || null);
+      } catch { setEnvio(null); }
       setLoading(false);
-    });
+    })();
   }, [stateKey, target]);
+
+  // Arquivo da NF: pelo token (servidor confere que a nota é deste envio); legado como fallback
+  const baixarArquivo = async (id) => {
+    if (ehToken) { try { const d = await publicoNFFile(target, id); if (d) return d; } catch {} }
+    return getNFFile(id);
+  };
 
   const confirmarPagamento = async () => {
     setPaying(true);
     try {
+      if (ehToken) {
+        // Servidor altera só este envio (e guarda a versão anterior em <chave>::backup::publico)
+        const r = await publicoEnvioMarcarPago(target, (payerName||"").trim() || null);
+        if (!r?.envio) throw new Error("envio não encontrado");
+        setEnvio(r.envio); setShowConfirm(false); setPayerName(""); setPaying(false);
+        return;
+      }
       const todosEnvios = (await getState(stateKey)) || [];
       const hoje = new Date();
       const dataHoje = hoje.toLocaleDateString("pt-BR");
@@ -85,7 +109,7 @@ export default function EnvioPublico({ numero, envioRef }) {
   };
 
   const downloadNF = async (id, filename) => {
-    const data = await getNFFile(id);
+    const data = await baixarArquivo(id);
     if (!data) { alert("Arquivo não encontrado"); return; }
     const a = document.createElement("a"); a.href = data; a.download = filename; a.click();
   };
@@ -101,7 +125,7 @@ export default function EnvioPublico({ numero, envioRef }) {
     const files = {};
     const usedNames = {};
     for (const arq of arquivos) {
-      const data = await getNFFile(arq.id);
+      const data = await baixarArquivo(arq.id);
       if (!data) continue;
       const commaIdx = data.indexOf(',');
       const ext = data.slice(0, commaIdx).match(/\/([^;]+)/)?.[1] || 'pdf';
@@ -146,8 +170,14 @@ export default function EnvioPublico({ numero, envioRef }) {
     setSavingStatus(true);
     try {
       const { notaId, tipo, novoStatus } = statusChange;
-      const todosEnvios = (await getState(stateKey)) || [];
       const campo = tipo === "jogo" ? "notasResumo" : tipo === "mensal" ? "mensaisResumo" : "livemodeResumo";
+      if (ehToken) {
+        const r = await publicoEnvioStatusNota(target, campo, notaId, novoStatus, nome);
+        if (!r?.envio) throw new Error("envio não encontrado");
+        setEnvio(r.envio); setStatusChange(null); setStatusChangeName(""); setSavingStatus(false);
+        return;
+      }
+      const todosEnvios = (await getState(stateKey)) || [];
       const agora = new Date().toISOString();
       const atualizado = todosEnvios.map(e => !envioMatches(e, target) ? e : {
         ...e,

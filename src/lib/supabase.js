@@ -262,6 +262,24 @@ export async function getNFFile(notaId) {
   return getState(`nf_file_${notaId}`);
 }
 
+// ─── CAMINHO PÚBLICO (telas sem login) ───────────────────────────────────────
+// Formulários de NF e página #envio/<token> não leem app_state direto: usam
+// RPCs que devolvem só o necessário (sem CPF/RG/valores) e validam o token no
+// servidor (migrations 20260909100000 / 20260909200000).
+const rpc = async (fn, args, oQue) => {
+  const { data, error } = await comTimeout(supabase.rpc(fn, args), oQue);
+  if (error) throw error;
+  return data;
+};
+export const publicoFornecedores = (key = 'fornecedores') => rpc('publico_fornecedores', { p_key: key }, 'carregar fornecedores');
+export const publicoJogos        = (key = 'jogos')        => rpc('publico_jogos', { p_key: key }, 'carregar jogos');
+// → { stateKey, envio } ou null
+export const publicoEnvio        = (token)                => rpc('publico_envio', { p_token: token }, 'carregar envio');
+export const publicoNFFile       = (token, notaId)        => rpc('publico_nf_file', { p_token: token, p_nota_id: String(notaId) }, `baixar NF ${notaId}`);
+export const publicoEnvioMarcarPago = (token, nome)       => rpc('publico_envio_marcar_pago', { p_token: token, p_nome: nome || null }, 'confirmar pagamento');
+export const publicoEnvioStatusNota = (token, campo, notaId, status, nome) =>
+  rpc('publico_envio_status_nota', { p_token: token, p_campo: campo, p_nota_id: String(notaId), p_status: status, p_nome: nome }, 'atualizar status da NF');
+
 // Existe arquivo para esta nota? Consulta só a chave — as linhas nf_file_ chegam
 // a 1 MB e baixar o conteúdo inteiro só pra checar existência é desperdício (e
 // dá timeout justamente quando o banco está lento).
