@@ -795,6 +795,9 @@ const ENTIDADES = ENTIDADES_VISUALIZADOR;
 
 function LoginGate({ T, authError, setAuthError }) {
   const [modo, setModo]         = useState("login"); // "login" | "cadastro"
+  // Config pública (texto LGPD + entidades extras) antes do login — RLS libera só essas chaves ao anon
+  const [, setCfgTick] = useState(0);
+  useEffect(() => { carregarConfig().then(() => setCfgTick(t => t + 1)).catch(() => {}); }, []);
   const [nome, setNome]         = useState("");
   const [funcao, setFuncao]     = useState("");
   const [entidade, setEntidade] = useState("");
@@ -971,12 +974,17 @@ function LoginGate({ T, authError, setAuthError }) {
             <div style={{fontSize:13,color:T.textMd,lineHeight:1.7,fontFamily:"'Poppins',sans-serif",display:"flex",flexDirection:"column",gap:10}}>
               <p style={{margin:0}}><strong style={{color:T.text}}>Controlador:</strong> Livemode Transmissões Ltda.</p>
               <p style={{margin:0}}><strong style={{color:T.text}}>Contato DPO:</strong> <a href="mailto:privacidade@livemode.com" style={{color:T.brand||"#65B32E"}}>privacidade@livemode.com</a></p>
-              <p style={{margin:0}}><strong style={{color:T.text}}>Dados coletados:</strong> nome completo, e-mail, função e entidade vinculada.</p>
-              <p style={{margin:0}}><strong style={{color:T.text}}>Finalidade:</strong> controle de acesso ao HUB Financeiro Livemode.</p>
               <p style={{margin:0}}><strong style={{color:T.text}}>Base legal:</strong> consentimento do titular (Art. 7º, I — Lei 13.709/2018 LGPD).</p>
-              <p style={{margin:0}}><strong style={{color:T.text}}>Retenção:</strong> dados mantidos enquanto a conta estiver ativa; removidos permanentemente após exclusão.</p>
-              <p style={{margin:0}}><strong style={{color:T.text}}>Seus direitos (Art. 18 LGPD):</strong> acesso, correção, exclusão, portabilidade e revogação do consentimento. Envie sua solicitação para <a href="mailto:privacidade@livemode.com" style={{color:T.brand||"#65B32E"}}>privacidade@livemode.com</a>.</p>
-              <p style={{margin:0}}><strong style={{color:T.text}}>Segurança:</strong> dados armazenados com criptografia em repouso e em trânsito (TLS 1.2+), com controle de acesso baseado em perfis.</p>
+              {/* Itens editáveis em Administração → Configurações (portal_settings.lgpd) */}
+              {((getConfig('lgpd')?.itens || []).length ? getConfig('lgpd').itens : [
+                { titulo: 'Dados coletados', texto: 'nome completo, e-mail, função e entidade vinculada.' },
+                { titulo: 'Finalidade', texto: 'controle de acesso ao HUB Financeiro Livemode.' },
+                { titulo: 'Retenção', texto: 'dados mantidos enquanto a conta estiver ativa; removidos permanentemente após exclusão.' },
+                { titulo: 'Seus direitos (Art. 18 LGPD)', texto: 'acesso, correção, exclusão, portabilidade e revogação do consentimento — solicite a privacidade@livemode.com.' },
+                { titulo: 'Segurança', texto: 'dados armazenados com criptografia em repouso e em trânsito (TLS 1.2+), com controle de acesso baseado em perfis.' },
+              ]).map((it, i) => (
+                <p key={i} style={{margin:0}}><strong style={{color:T.text}}>{it.titulo}:</strong> {it.texto}</p>
+              ))}
             </div>
             <button onClick={() => setShowPrivacy(false)} style={{marginTop:20,width:"100%",background:T.brand||"#65B32E",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:500,cursor:"pointer",fontFamily:"'Poppins',sans-serif"}}>
               Fechar
@@ -1002,6 +1010,7 @@ import { REGISTRY_KEY } from "./data/customCampeonato";
 import { ENTIDADES_VISUALIZADOR, podeVerCampeonato } from "./config/entities";
 import { ORC_REGISTRY_KEY, podeVerOrcamento } from "./data/orcamentos";
 import { logAcao, descreverPagina } from "./lib/audit";
+import { carregarConfig, getConfig } from "./lib/portalConfig";
 
 // Perfil + time: a entidade individual do perfil vence; sem ela, vale a do
 // time (teams.entidades). Módulos transversais liberados ao visualizador vêm
@@ -1129,10 +1138,12 @@ export default function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (session?.user) {
-        if (session.user.app_metadata?.provider === 'google' &&
-            !session.user.email?.endsWith('@livemode.com')) {
+        // Login Google só para os domínios configurados (Administração → Configurações)
+        const googleDoms = (getConfig('signup')?.google_dominios || ['livemode.com']).map(d => String(d).toLowerCase());
+        const domUser = String(session.user.email || '').split('@')[1]?.toLowerCase();
+        if (session.user.app_metadata?.provider === 'google' && googleDoms.length > 0 && !googleDoms.includes(domUser)) {
           setTimeout(() => supabase.auth.signOut(), 0);
-          setAuthError('Acesso restrito a contas @livemode.com');
+          setAuthError(`Acesso restrito a contas ${googleDoms.map(d => '@' + d).join(', ')}`);
           setAuthLoading(false);
           return;
         }
@@ -1206,6 +1217,10 @@ export default function App() {
     });
     return () => { mounted = false; };
   }, [user]);
+
+  // Configurações do portal (entidades extras, cadastro, LGPD, retenção): carrega
+  // ao logar e mantém realtime; entidades extras entram na lista global.
+  useEffect(() => { if (user) carregarConfig().catch(() => {}); }, [user?.id]);
 
   // Registry de orçamentos (orc_registry): alimenta os cards de "Orçamentos"
   // na Home — leitura + realtime; a escrita fica toda no HubOrcamentos.

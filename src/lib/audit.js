@@ -18,6 +18,8 @@ export const AUDIT_ACOES = {
   team_created:    { label: "Criou time",          color: "#0891B2", grupo: "admin" },
   team_updated:    { label: "Editou time",         color: "#D97706", grupo: "admin" },
   team_deleted:    { label: "Excluiu time",        color: "#DC2626", grupo: "admin" },
+  config_update:   { label: "Alterou configuração", color: "#0891B2", grupo: "admin" },
+  audit_purge:     { label: "Limpou audit log",    color: "#DC2626", grupo: "admin" },
 };
 export const AUDIT_GRUPOS = [
   { key: "acesso",    label: "Acesso" },
@@ -64,6 +66,8 @@ export function descreverEvento(ev, nomeDe = (id) => id || "—") {
     case "team_created":    return `Criou o time ${d.nome || "—"}${(d.dominios || []).length ? ` (${d.dominios.join(", ")})` : ""}`;
     case "team_updated":    return `Editou o time ${d.nome || "—"}`;
     case "team_deleted":    return `Excluiu o time ${d.nome || "—"}`;
+    case "config_update":   return `Alterou configuração "${d.key || "—"}"${d.entidade ? ` · entidade ${d.entidade}` : d.removida ? ` · removeu ${d.removida}` : d.retencao_dias ? ` · retenção ${d.retencao_dias} dias` : ""}`;
+    case "audit_purge":     return `Apagou ${d.apagados ?? 0} evento(s) do audit log (retenção ${d.retencao_dias ?? "—"} dias)`;
     default: return ev.action;
   }
 }

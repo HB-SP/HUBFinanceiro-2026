@@ -3,11 +3,12 @@ import { supabase } from "../lib/supabase";
 import { logAcao } from "../lib/audit";
 import LivemodeLogo from "./LivemodeLogo";
 import { IconButton } from "./ui";
-import { ArrowLeft, Sun, Moon, LogOut, Users, Plus, Trash2, Mail, UsersRound, ScrollText, ShieldCheck, Activity } from "lucide-react";
+import { ArrowLeft, Sun, Moon, LogOut, Users, Plus, Trash2, Mail, UsersRound, ScrollText, ShieldCheck, Activity, Settings } from "lucide-react";
 import { FONT, RADIUS } from "../constants";
 import TabTimes from "./admin/TabTimes";
 import TabAuditLog from "./admin/TabAuditLog";
 import TabAcessos from "./admin/TabAcessos";
+import TabConfiguracoes from "./admin/TabConfiguracoes";
 
 // Abas da Administração do Portal (fase 1: Usuários · Times · Audit log)
 const ABAS_ADMIN = [
@@ -15,6 +16,7 @@ const ABAS_ADMIN = [
   { key: "times",    label: "Times",     icon: UsersRound },
   { key: "acessos",  label: "Acessos",   icon: Activity },
   { key: "audit",    label: "Audit log", icon: ScrollText },
+  { key: "config",   label: "Configurações", icon: Settings },
 ];
 
 // ─── Role helpers ─────────────────────────────────────────────────────────────
@@ -513,6 +515,7 @@ export default function AdminUsuarios({ onBack, T, darkMode, setDarkMode, onSign
           {aba === "times" && <TabTimes T={T} users={users} onUsersChanged={loadUsers}/>}
           {aba === "audit" && <TabAuditLog T={T} users={users}/>}
           {aba === "acessos" && <TabAcessos T={T} users={users}/>}
+          {aba === "config" && <TabConfiguracoes T={T} currentUser={currentUser}/>}
           {aba === "usuarios" && (<>
           {/* ── Convites ── */}
           <div style={{ background: T.surface || T.card, border: `1px solid ${T.border}`, borderRadius: RADIUS.lg, padding: "16px 20px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: T.shadow || "0 1px 3px rgba(0,0,0,0.06)" }}>
