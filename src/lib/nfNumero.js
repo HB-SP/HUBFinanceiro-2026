@@ -5,12 +5,12 @@
 //   1  ambiente (1 produção / 2 homologação)   ← na prática vem "2" nas notas reais
 //   1  tipo de inscrição (1 CPF / 2 CNPJ)
 //   14 inscrição federal (CNPJ/CPF com zeros à esquerda)
-//   14 NÚMERO DA NFS-e com zeros à esquerda      ← posições 24–37
+//   13 NÚMERO DA NFS-e com zeros à esquerda      ← posições 24–36 (conferido em 30 chaves reais)
 //   4  ano e mês da emissão (AAMM)
 //   9  código verificador/local + 1 dígito
-// Ex.: 3304557 2 2 02252173000122 00000000000024 2608 303834503 0  →  NF 24 (Century, ago/2026)
+// Ex.: 3304557 2 2 02252173000122 0000000000024 2608 3038345030  →  NF 24 (Century, ago/2026)
 const POS_NUMERO = 23;   // índice 0-based do início do número
-const LEN_NUMERO = 14;
+const LEN_NUMERO = 13;   // 13 dígitos; AAMM começa no índice 36
 
 const soDigitos = (s) => String(s || "").replace(/\D/g, "");
 
@@ -28,7 +28,7 @@ export function analisarNumeroNF(texto) {
   const d = soDigitos(original);
   const numero = String(parseInt(d.slice(POS_NUMERO, POS_NUMERO + LEN_NUMERO), 10) || "");
   const cnpjEmissor = d.slice(9, 23);
-  const anoMes = d.slice(37, 41);
+  const anoMes = d.slice(36, 40);
   if (!numero) return { numero: original.trim(), chaveAcesso: null, detectada: false };
   return { numero, chaveAcesso: d, detectada: true, cnpjEmissor, anoMes };
 }
@@ -44,6 +44,6 @@ export function patchNumeroNF(texto) {
 // Texto curto para mostrar ao lado do campo quando a chave foi reconhecida.
 export function avisoChaveDetectada(chaveAcesso, numero) {
   if (!chaveAcesso) return null;
-  const mm = chaveAcesso.slice(39, 41), aa = chaveAcesso.slice(37, 39);
+  const aa = chaveAcesso.slice(36, 38), mm = chaveAcesso.slice(38, 40);
   return `Chave de acesso da NFS-e reconhecida — número da nota: ${numero}${aa && mm ? ` (emissão ${mm}/20${aa})` : ""}`;
 }
