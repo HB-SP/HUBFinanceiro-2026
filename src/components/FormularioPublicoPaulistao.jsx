@@ -1,3 +1,4 @@
+import { patchNumeroNF, avisoChaveDetectada } from "../lib/nfNumero";
 import { useState, useRef, useEffect } from "react";
 import { Sun, Moon } from "lucide-react";
 import { DateInput } from "./ui";
@@ -129,8 +130,10 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
       </div>
       <div style={{marginBottom:14}}>
         <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Nº da Nota Fiscal <span style={{color:"#ef4444"}}>*</span></label>
-        <input value={nfData.numeroNF} onChange={e => setNfData(d => ({...d, numeroNF:e.target.value}))} placeholder="obrigatório" style={IS}/>
+        {/* Colou a chave de acesso da NFS-e (50 dígitos)? Extrai o número real e guarda a chave. */}
+        <input value={nfData.numeroNF} onChange={e => setNfData(d => ({...d, ...patchNumeroNF(e.target.value)}))} placeholder="obrigatório" style={IS}/>
         {!nfData.numeroNF.trim() && <p style={{color:"#ef4444",fontSize:11,margin:"4px 0 0"}}>Informe o número da nota fiscal para enviar</p>}
+        {nfData.chaveAcesso && <p style={{color:"#059669",fontSize:11,margin:"4px 0 0"}}>{avisoChaveDetectada(nfData.chaveAcesso, nfData.numeroNF)}</p>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
         <div>

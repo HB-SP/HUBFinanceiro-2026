@@ -1,3 +1,4 @@
+import { patchNumeroNF } from "../../lib/nfNumero";
 import { useState, useMemo, useRef } from "react";
 import { KPI, Pill } from "../shared";
 import { RADIUS, iSty, btnStyle } from "../../constants";
@@ -187,7 +188,7 @@ function NFLivemodeModal({ onSave, onClose, jogos, T, servicosLm = SERVICOS_LM }
           </div>
           <div style={{marginBottom:12}}>
             <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Nº da Nota</label>
-            <input value={form.numeroNF} onChange={e=>set("numeroNF",e.target.value)} style={IS}/>
+            <input value={form.numeroNF} onChange={e=>{ const p = patchNumeroNF(e.target.value); set("numeroNF", p.numeroNF); set("chaveAcesso", p.chaveAcesso); }} style={IS} title="Pode colar a chave de acesso da NFS-e: o número é extraído automaticamente"/>
           </div>
           <div style={{marginBottom:12}}>
             <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data Emissão</label>
@@ -364,7 +365,7 @@ function NFLiveUModal({ onSave, onClose, jogos, T }) {
           </div>
           <div style={{marginBottom:12}}>
             <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Nº da Nota</label>
-            <input value={form.numeroNF} onChange={e=>set("numeroNF",e.target.value)} style={IS}/>
+            <input value={form.numeroNF} onChange={e=>{ const p = patchNumeroNF(e.target.value); set("numeroNF", p.numeroNF); set("chaveAcesso", p.chaveAcesso); }} style={IS} title="Pode colar a chave de acesso da NFS-e: o número é extraído automaticamente"/>
           </div>
           <div style={{marginBottom:12}}>
             <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data Emissão</label>

@@ -1,3 +1,4 @@
+import { patchNumeroNF, avisoChaveDetectada } from "../../lib/nfNumero";
 import { useState, useRef } from "react";
 import { Pill } from "../shared";
 import { DateInput } from "../ui";
@@ -342,7 +343,8 @@ export default function FormularioNF({ jogos, fornecedores = [], onSubmit, T }) 
               </div>
               <div style={{marginBottom:14}}>
                 <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Nº da Nota</label>
-                <input value={nfData.numeroNF} onChange={e => setNfData(d => ({...d, numeroNF: e.target.value}))} style={IS}/>
+                <input value={nfData.numeroNF} onChange={e => setNfData(d => ({...d, ...patchNumeroNF(e.target.value)}))} style={IS} title="Pode colar a chave de acesso da NFS-e: o número é extraído automaticamente"/>
+                {nfData.chaveAcesso && <p style={{color:"#059669",fontSize:11,margin:"4px 0 0"}}>{avisoChaveDetectada(nfData.chaveAcesso, nfData.numeroNF)}</p>}
               </div>
               <div style={{marginBottom:14}}>
                 <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data Emissão</label>
