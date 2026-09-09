@@ -61,12 +61,16 @@ const SERVICOS_MENSAIS = [
   { label:"Edição",                                   servicoId:9,    categoria:"Ferramenta de Clipping" },
 ];
 
+// Funções do jogo = serviços com provisionado > 0. Pelo caminho público a RPC
+// devolve só a LISTA de chaves (servicosDisponiveis), sem valores; o campo
+// provisionado fica como fallback do caminho legado.
 function extrairServicos(jogo) {
   const s = [];
+  const disponiveis = Array.isArray(jogo.servicosDisponiveis) ? new Set(jogo.servicosDisponiveis) : null;
   CATS.forEach(cat => { cat.subs.forEach(sub => {
     if (SUBS_EXCLUIR.has(sub.key)) return;
-    if ((jogo.provisionado?.[sub.key] || 0) > 0)
-      s.push({ subKey:sub.key, subLabel:sub.label, catLabel:cat.label, catColor:cat.color });
+    const tem = disponiveis ? disponiveis.has(sub.key) : (jogo.provisionado?.[sub.key] || 0) > 0;
+    if (tem) s.push({ subKey:sub.key, subLabel:sub.label, catLabel:cat.label, catColor:cat.color });
   })});
   return s;
 }
