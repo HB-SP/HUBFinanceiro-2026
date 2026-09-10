@@ -1019,6 +1019,8 @@ function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos,
               {sub.dataEnvio && <span>Envio: {sub.dataEnvio}</span>}
               {sub.obs && <span>Obs: {sub.obs}</span>}
               {sub.hasFile && <Pill label="Arquivo anexo" color="#22c55e"/>}
+              {/* Fornecedor anexou (há assinatura do arquivo) mas o PDF não foi gravado — caso de 09-10/09/2026 (RLS recusou o upsert em silêncio). */}
+              {!sub.hasFile && sub.fileHash && <Pill label="PDF não chegou — pedir reenvio" color="#dc2626"/>}
               <span style={{color:T.textSm}}>Enviado: {new Date(sub.enviadoEm).toLocaleDateString("pt-BR")}</span>
             </div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
