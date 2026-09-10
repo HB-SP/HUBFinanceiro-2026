@@ -187,10 +187,22 @@ export function extrairDadosNF(txt) {
     || T.match(new RegExp("Valor\\s*d[oa]s?\\s*Servi[çc]os?" + V, "i"))
     || T.match(new RegExp("Valor\\s*(?:Total|Bruto|da\\s*Fatura|do\\s*Recibo)" + V, "i"))
     || T.match(new RegExp("Total\\s*(?:Geral|a\\s*Pagar|da\\s*Nota|da\\s*Fatura|Amount)?" + V, "i"));
-  if (vm) { r.valor = parseBR(vm[1]); r.valorFonte = /Total|L[íi]quido/i.test(vm[0]) ? "total" : "item"; }
+  // Fatura com "Valor Total Fatura" sem número ao lado (CTA com 2+ jogos: o
+  // total sai solto no fim do texto). Aí o total é o maior valor monetário do
+  // documento — e, se ele for a soma de outras linhas, marcamos como tal.
+  const totalSemNumero = /Valor\s*Total\s*(?:da\s*)?Fatura(?!\s*[:=]?\s*(?:R\$)?\s*[\d.]+,\d{2})/i.test(T);
+  if (vm && !(totalSemNumero && /Fatura\s*Valor\s*R\$/i.test(T))) { r.valor = parseBR(vm[1]); r.valorFonte = /Total|L[íi]quido/i.test(vm[0]) ? "total" : "item"; }
   else {
-    const todos = [...T.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(x => parseBR(x[1])).filter(x => x > 0);
-    if (todos.length) { r.valor = Math.max(...todos); r.valorFonte = "maior R$"; }
+    const dinheiro = [...T.matchAll(/(?<![\d,.])(\d{1,3}(?:\.\d{3})*,\d{2})(?![\d])/g)].map(x => parseBR(x[1])).filter(x => x > 0);
+    if (dinheiro.length) {
+      const max = Math.max(...dinheiro);
+      const outros = dinheiro.filter(v => v !== max);
+      const cents = v => Math.round(v * 100);
+      // subset-sum simples (até 20 valores) para saber se o máximo é soma de linhas
+      let soma = false;
+      if (outros.length && outros.length <= 20) { const alvo = cents(max); const alc = new Set([0]); for (const v of outros) for (const s of [...alc]) { if (s + cents(v) <= alvo) alc.add(s + cents(v)); } soma = alc.has(alvo); }
+      r.valor = max; r.valorFonte = soma ? "soma de linhas" : "maior valor";
+    }
   }
   return r;
 }
