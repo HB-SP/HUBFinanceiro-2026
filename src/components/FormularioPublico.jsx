@@ -4,6 +4,12 @@ import { divergenciasEnvio } from "../lib/leitorNF";
 // Leitura do PDF × digitado: só avisa e deixa o fornecedor confirmar (decisão do financeiro, 10/09/2026).
 const MSG_DIVERGENCIA = (divs) => `⚠️ O PDF anexado não bate com o que foi digitado:\n\n${divs.map(d => "• " + d.texto).join("\n")}\n\nQuer enviar assim mesmo?\n(Cancelar volta para você corrigir)`;
 const hojeBR = () => new Date().toLocaleDateString("pt-BR"); // dataEnvio automática
+// Aviso dos campos obrigatórios que faltam na etapa (pedido do financeiro, 10/09/2026).
+const AvisoFaltando = ({ itens }) => itens?.length ? (
+  <div style={{marginTop:14,padding:"8px 12px",borderRadius:8,background:"#f59e0b14",border:"1px solid #f59e0b66",color:"#b45309",fontSize:12}}>
+    <b>Para continuar, falta:</b> {itens.join(", ")}.
+  </div>
+) : null;
 const cnpjDoFornecedor = (nome, lista) => (lista || []).find(f => String(f.apelido || "").trim().toLowerCase() === String(nome || "").trim().toLowerCase())?.cnpj || null;
 
 import { useState, useRef, useEffect } from "react";
@@ -153,14 +159,13 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
       <LeituraNFForm arquivo={arquivo} nfData={nfData} setNfData={setNfData} onLeitura={setLeitura} total={total} cnpj={cnpjDoFornecedor(nfData.fornecedor, fornecedores)} onVoltarValores={onVoltarValores} T={T}/>
       <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:10,fontWeight:600}}>2. Confira os dados da nota</label>
       <div style={{marginBottom:14}}>
-        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Fornecedor / Razão Social</label>
+        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Fornecedor / Razão Social <span style={{color:"#ef4444"}}>*</span></label>
         <FornecedorInput value={nfData.fornecedor} onChange={v => setNfData(d => ({...d, fornecedor:v}))} fornecedores={fornecedores} T={T}/>
       </div>
       <div style={{marginBottom:14}}>
         <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Nº da Nota Fiscal <span style={{color:"#ef4444"}}>*</span></label>
         {/* Colou a chave de acesso da NFS-e (50 dígitos)? Extrai o número real e guarda a chave. */}
         <input value={nfData.numeroNF} onChange={e => setNfData(d => ({...d, ...patchNumeroNF(e.target.value)}))} placeholder="obrigatório" style={IS}/>
-        {!nfData.numeroNF.trim() && <p style={{color:"#ef4444",fontSize:11,margin:"4px 0 0"}}>Informe o número da nota fiscal para enviar</p>}
         {nfData.chaveAcesso && <p style={{color:"#059669",fontSize:11,margin:"4px 0 0"}}>{avisoChaveDetectada(nfData.chaveAcesso, nfData.numeroNF)}</p>}
       </div>
       {/* "Data de Envio" saiu do formulário (10/09/2026): é preenchida automaticamente com o dia do envio. */}
@@ -213,6 +218,16 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
     if (step === 3) return Object.values(valores).some(v => parseValorBR(v) > 0);
     if (step === 4) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0 && !!arquivo; // PDF obrigatório (regra do financeiro)
     return false;
+  };
+
+  // O que falta na etapa atual — mostrado acima dos botões enquanto "Próximo"/"Enviar" está travado.
+  const faltando = () => {
+    if (canNext()) return [];
+    if (step === 0) return ["selecionar a rodada"];
+    if (step === 1) { const r = qtdJogos - jogosSel.length; return [r > 0 ? `selecionar ${r} jogo${r > 1 ? "s" : ""} (${jogosSel.length} de ${qtdJogos})` : `selecionar exatamente ${qtdJogos} jogo${qtdJogos > 1 ? "s" : ""} (${jogosSel.length} marcados)`]; }
+    if (step === 2) return ["marcar pelo menos um serviço"];
+    if (step === 3) return ["informar pelo menos um valor"];
+    const f = []; if (!arquivo) f.push("anexar a nota fiscal em PDF"); if (!nfData.fornecedor) f.push("informar o fornecedor"); if (!nfData.numeroNF.trim()) f.push("informar o número da nota"); return f;
   };
 
   const toggleJogo = id => {
@@ -458,6 +473,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
       </div>
 
       {/* Navigation */}
+      <AvisoFaltando itens={faltando()}/>
       <div style={{display:"grid",gridTemplateColumns:step===0?"1fr":"1fr 1fr",gap:10,marginTop:16}}>
         {step > 0 && (
           <button onClick={() => setStep(s => s-1)} style={{...btnS,background:"#475569"}}>Voltar</button>
@@ -499,6 +515,15 @@ function FormMensal({ fornecedores, onDone, T }) {
     if (step === 2) return parseValorBR(valor) > 0;
     if (step === 3) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0 && !!arquivo; // PDF obrigatório (regra do financeiro)
     return false;
+  };
+
+  // O que falta na etapa atual — mostrado acima dos botões enquanto "Próximo"/"Enviar" está travado.
+  const faltando = () => {
+    if (canNext()) return [];
+    if (step === 0) return ["selecionar o mês"];
+    if (step === 1) return ["selecionar o serviço"];
+    if (step === 2) return ["informar o valor"];
+    const f = []; if (!arquivo) f.push("anexar a nota fiscal em PDF"); if (!nfData.fornecedor) f.push("informar o fornecedor"); if (!nfData.numeroNF.trim()) f.push("informar o número da nota"); return f;
   };
 
   const handleSubmit = async () => {
@@ -622,6 +647,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         )}
       </div>
 
+      <AvisoFaltando itens={faltando()}/>
       <div style={{display:"grid",gridTemplateColumns:step===0?"1fr":"1fr 1fr",gap:10,marginTop:16}}>
         {step > 0 && <button onClick={() => setStep(s => s-1)} style={{...btnS,background:"#475569"}}>Voltar</button>}
         {step < 3
