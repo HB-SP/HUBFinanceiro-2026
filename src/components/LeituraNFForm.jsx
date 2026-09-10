@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { lerArquivoNF, resumoLeituraCurto } from "../lib/leitorNF";
+import { lerArquivoNF, resumoLeituraCurto, divergenciasEnvio } from "../lib/leitorNF";
 import { patchNumeroNF } from "../lib/nfNumero";
 
 // ─── LEITURA DO PDF NO FORMULÁRIO PÚBLICO ────────────────────────────────────
@@ -10,7 +10,7 @@ import { patchNumeroNF } from "../lib/nfNumero";
 //   • entrega os dados lidos ao formulário (onLeitura) — na hora de enviar, o
 //     formulário compara com o digitado e só AVISA se divergir.
 // PDF escaneado/imagem: aviso cinza, tudo segue manual. Nada é bloqueado.
-export default function LeituraNFForm({ arquivo, setNfData, onLeitura, T }) {
+export default function LeituraNFForm({ arquivo, nfData, setNfData, onLeitura, total, cnpj, T }) {
   const [estado, setEstado] = useState(null); // null | {lendo} | {dados, preencheu:[]} | {erro}
 
   useEffect(() => {
@@ -40,6 +40,9 @@ export default function LeituraNFForm({ arquivo, setNfData, onLeitura, T }) {
   if (estado.lendo) return <p style={{ margin: "6px 0 0", color: T.textSm, fontSize: 12 }}>Lendo o PDF…</p>;
   if (estado.erro) return null; // leitura é conveniência; sem ela o fluxo segue igual
   const resumo = resumoLeituraCurto(estado.dados);
+  // Divergências AO VIVO: o valor é digitado numa etapa anterior, então o aviso
+  // tem de aparecer aqui, assim que o PDF é lido — não só no Enviar.
+  const divs = nfData ? divergenciasEnvio(estado.dados, { ...nfData, total, cnpj }) : [];
   if (!resumo) {
     return <p style={{ margin: "6px 0 0", color: T.textSm, fontSize: 12 }}>Não conseguimos ler o texto deste PDF (pode ser escaneado). Confira os dados manualmente.</p>;
   }
@@ -49,6 +52,13 @@ export default function LeituraNFForm({ arquivo, setNfData, onLeitura, T }) {
       <p style={{ margin: "3px 0 0", color: T.textSm, fontSize: 11 }}>
         {estado.preencheu.length ? `Preenchemos ${estado.preencheu.join(" e ")} para você. ` : ""}Confira se bate com a nota antes de enviar.
       </p>
+      {divs.length > 0 && (
+        <div style={{ marginTop: 8, padding: "8px 10px", borderRadius: 6, background: "#f59e0b18", border: "1px solid #f59e0b66" }}>
+          <p style={{ margin: 0, color: "#b45309", fontSize: 12, fontWeight: 700 }}>⚠️ Atenção: o PDF não bate com o que foi informado</p>
+          {divs.map(d => <p key={d.campo} style={{ margin: "3px 0 0", color: "#b45309", fontSize: 12 }}>• {d.texto}</p>)}
+          <p style={{ margin: "4px 0 0", color: T.textSm, fontSize: 11 }}>Volte e corrija, ou siga se tiver certeza — vamos perguntar de novo ao enviar.</p>
+        </div>
+      )}
     </div>
   );
 }

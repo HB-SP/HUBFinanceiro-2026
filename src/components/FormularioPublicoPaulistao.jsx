@@ -117,7 +117,7 @@ const validarArquivoNF = (f) => {
   return null;
 };
 
-function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T, setLeitura }) {
+function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T, setLeitura, total }) {
   const [erroArquivo, setErroArquivo] = useState(null);
   const escolherArquivo = (f) => {
     const erro = validarArquivoNF(f);
@@ -168,7 +168,7 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
         </div>
         {erroArquivo && <p style={{margin:"6px 0 0",color:"#ef4444",fontSize:12,fontWeight:600}}>{erroArquivo}</p>}
       </div>
-      <LeituraNFForm arquivo={arquivo} setNfData={setNfData} onLeitura={setLeitura} T={T}/>
+      <LeituraNFForm arquivo={arquivo} nfData={nfData} setNfData={setNfData} onLeitura={setLeitura} total={total} cnpj={cnpjDoFornecedor(nfData.fornecedor, fornecedores)} T={T}/>
       {resumo}
     </div>
   );
@@ -437,7 +437,7 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
         )}
 
         {step === 4 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={totalGeral}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
@@ -613,7 +613,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         )}
 
         {step === 3 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={parseValorBR(valor)}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
