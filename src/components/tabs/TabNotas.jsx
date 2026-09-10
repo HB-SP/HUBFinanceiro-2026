@@ -1,4 +1,5 @@
 import AnexoNF from "../AnexoNF";
+import LeituraNF from "../LeituraNF";
 import { confirmarArquivoRepetido } from "../../lib/dedupeNF";
 import { patchNumeroNF } from "../../lib/nfNumero";
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -1011,6 +1012,8 @@ function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos,
               </div>
             )}
 
+            {/* Leitura automática do PDF anexado × dados digitados (só leitura) */}
+            {sub.hasFile && <LeituraNF id={sub.id} carregar={() => getNFFile(sub.id)} nota={{...sub, valorNF: valorAtual}} fornecedores={fornecedores} T={T}/>}
             <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:12,color:T.textSm,marginBottom:12}}>
               {sub.dataEmissao && <span>Emissão: {sub.dataEmissao}</span>}
               {sub.dataEnvio && <span>Envio: {sub.dataEnvio}</span>}
@@ -1082,6 +1085,9 @@ function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos,
               {previewSrc && <a href={previewSrc} download={`NF_${previewSub.fornecedor}`} style={{...btnStyle,background:"#3b82f6",padding:"6px 14px",fontSize:12,textDecoration:"none"}}>Download</a>}
               <button onClick={() => { setPreviewSub(null); setPreviewSrc(null); }} style={{...btnStyle,background:"#475569",padding:"6px 14px",fontSize:12}}>Fechar</button>
             </div>
+          </div>
+          <div style={{padding:"0 20px",flexShrink:0}} onClick={e => e.stopPropagation()}>
+            <LeituraNF id={previewSub.id} carregar={() => getNFFile(previewSub.id)} nota={previewSub} fornecedores={fornecedores} T={{...T, textSm:"#94a3b8"}} compacto/>
           </div>
           <div style={{flex:1,padding:"0 20px 20px",minHeight:0}} onClick={e => e.stopPropagation()}>
             {previewLoadingNF ? (
