@@ -123,7 +123,7 @@ const validarArquivoNF = (f) => {
   return null;
 };
 
-function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T, setLeitura, total }) {
+function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T, setLeitura, total, onVoltarValores }) {
   const [erroArquivo, setErroArquivo] = useState(null);
   const escolherArquivo = (f) => {
     const erro = validarArquivoNF(f);
@@ -135,7 +135,22 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
   return (
     <div>
       <h3 style={{color:T.text,margin:"0 0 4px",fontSize:16}}>Dados da Nota Fiscal</h3>
-      <p style={{color:T.textSm,fontSize:12,margin:"0 0 16px"}}>Preencha os dados e anexe o arquivo</p>
+      <p style={{color:T.textSm,fontSize:12,margin:"0 0 16px"}}>Comece anexando a nota: lemos o PDF e preenchemos o que der. Depois confira os dados.</p>
+      <div style={{marginBottom:18}}>
+        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>1. Anexe a nota fiscal (PDF) <span style={{color:"#ef4444"}}>*</span></label>
+        <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={e => escolherArquivo(e.target.files[0]||null)} style={{display:"none"}}/>
+        <div onClick={() => fileRef.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => {e.preventDefault(); escolherArquivo(e.dataTransfer.files[0]||null);}}
+          style={{border:`2px dashed ${arquivo?BRAND:(erroArquivo?"#ef4444":T.muted)}`,borderRadius:10,padding:"20px 16px",cursor:"pointer",textAlign:"center",background:arquivo?"#22c55e11":(erroArquivo?"#ef444411":T.bg)}}>
+          {arquivo
+            ? <p style={{margin:0,color:BRAND,fontSize:14,fontWeight:600}}>{arquivo.name}<br/><span style={{fontSize:12,fontWeight:400}}>({(arquivo.size/1024).toFixed(0)} KB)</span></p>
+            : <p style={{margin:0,color:T.textSm,fontSize:13}}>Toque para selecionar ou arraste o arquivo<br/><span style={{fontSize:11}}>Somente PDF (máx. {MAX_NF_MB}MB)</span></p>}
+        </div>
+        {erroArquivo && <p style={{margin:"6px 0 0",color:"#ef4444",fontSize:12,fontWeight:600}}>{erroArquivo}</p>}
+      </div>
+      <LeituraNFForm arquivo={arquivo} nfData={nfData} setNfData={setNfData} onLeitura={setLeitura} total={total} cnpj={cnpjDoFornecedor(nfData.fornecedor, fornecedores)} onVoltarValores={onVoltarValores} T={T}/>
+      <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:10,fontWeight:600}}>2. Confira os dados da nota</label>
       <div style={{marginBottom:14}}>
         <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Fornecedor / Razão Social</label>
         <FornecedorInput value={nfData.fornecedor} onChange={v => setNfData(d => ({...d, fornecedor:v}))} fornecedores={fornecedores} T={T}/>
@@ -161,20 +176,6 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
         <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Observações (opcional)</label>
         <input value={nfData.obs} onChange={e => setNfData(d => ({...d, obs:e.target.value}))} style={IS}/>
       </div>
-      <div style={{marginBottom:16}}>
-        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Arquivo da NF (obrigatório)</label>
-        <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={e => escolherArquivo(e.target.files[0]||null)} style={{display:"none"}}/>
-        <div onClick={() => fileRef.current?.click()}
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => {e.preventDefault(); escolherArquivo(e.dataTransfer.files[0]||null);}}
-          style={{border:`2px dashed ${arquivo?BRAND:(erroArquivo?"#ef4444":T.muted)}`,borderRadius:10,padding:"20px 16px",cursor:"pointer",textAlign:"center",background:arquivo?"#22c55e11":(erroArquivo?"#ef444411":T.bg)}}>
-          {arquivo
-            ? <p style={{margin:0,color:BRAND,fontSize:14,fontWeight:600}}>{arquivo.name}<br/><span style={{fontSize:12,fontWeight:400}}>({(arquivo.size/1024).toFixed(0)} KB)</span></p>
-            : <p style={{margin:0,color:T.textSm,fontSize:13}}>Toque para selecionar ou arraste o arquivo<br/><span style={{fontSize:11}}>Somente PDF (máx. {MAX_NF_MB}MB)</span></p>}
-        </div>
-        {erroArquivo && <p style={{margin:"6px 0 0",color:"#ef4444",fontSize:12,fontWeight:600}}>{erroArquivo}</p>}
-      </div>
-      <LeituraNFForm arquivo={arquivo} nfData={nfData} setNfData={setNfData} onLeitura={setLeitura} total={total} cnpj={cnpjDoFornecedor(nfData.fornecedor, fornecedores)} T={T}/>
       {resumo}
     </div>
   );
@@ -432,7 +433,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
 
         {/* STEP 4: Dados NF */}
         {step === 4 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={totalGeral}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={totalGeral} onVoltarValores={() => setStep(3)}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
@@ -612,7 +613,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         )}
 
         {step === 3 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={parseValorBR(valor)}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura} total={parseValorBR(valor)} onVoltarValores={() => setStep(2)}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
