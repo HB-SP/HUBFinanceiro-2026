@@ -105,6 +105,10 @@ const REGRAS_DATA = [
   new RegExp("Data\\s*e\\s*Hora\\s*d[ae]\\s*Emiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
   new RegExp("Data\\s*d[ae]\\s*Emiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
   new RegExp("\\bEmiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
+  // De Nadai (fatura de locação): o rótulo "DATA DE EMISSÃO:" fica longe do valor
+  // no fluxo do texto; a data de emissão é a que vem colada em "LOCAÇÃO"
+  // ("01/09/2026 LOCAÇÃO"). As datas dos jogos vêm na tabela, antes.
+  { re: new RegExp(D + "\\s+LOCA[ÇC][ÃA]O\\b", "i"), grupo: 1 },
   // Loc-Line: cabeçalho "PERÍODO DE REFERÊNCIA DATA DE EMISSÃO" e valores "EVENTO : 14/03/2026 11:11 - 14/03/2026 11:11 16/03/2026"
   { re: new RegExp("EVENTO\\s*:\\s*" + D + "[\\s\\d:]*-\\s*" + D + "[\\s\\d:]*\\s" + D, "i"), grupo: 3 },
   new RegExp("Emitid[ao]\\s*em\\s*:?\\s*" + D, "i"),
