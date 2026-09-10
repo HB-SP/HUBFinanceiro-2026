@@ -156,7 +156,7 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
         <input value={nfData.obs} onChange={e => setNfData(d => ({...d, obs:e.target.value}))} style={IS}/>
       </div>
       <div style={{marginBottom:16}}>
-        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Arquivo da NF</label>
+        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Arquivo da NF (obrigatório)</label>
         <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={e => escolherArquivo(e.target.files[0]||null)} style={{display:"none"}}/>
         <div onClick={() => fileRef.current?.click()}
           onDragOver={e => e.preventDefault()}
@@ -206,7 +206,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
     if (step === 1) return jogosSel.length === qtdJogos;
     if (step === 2) return Object.values(servicosSel).some(a => a.length > 0);
     if (step === 3) return Object.values(valores).some(v => parseValorBR(v) > 0);
-    if (step === 4) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0;
+    if (step === 4) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0 && !!arquivo; // PDF obrigatório (regra do financeiro)
     return false;
   };
 
@@ -487,7 +487,7 @@ function FormMensal({ fornecedores, onDone, T }) {
     if (step === 0) return mesSel != null;
     if (step === 1) return servicoSel != null;
     if (step === 2) return parseValorBR(valor) > 0;
-    if (step === 3) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0;
+    if (step === 3) return nfData.fornecedor.length > 0 && nfData.numeroNF.trim().length > 0 && !!arquivo; // PDF obrigatório (regra do financeiro)
     return false;
   };
 
