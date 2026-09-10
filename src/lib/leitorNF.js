@@ -65,7 +65,8 @@ export async function extrairTextoPDF(dataUrl, maxPaginas = 2) {
 // ── Rótulos de NÚMERO, do mais específico ao mais genérico ─────────────────
 // `data`: índice do grupo que traz a data de emissão junto (layouts em que o
 // cabeçalho vem antes e os valores depois, na mesma ordem).
-const D = "(\\d{2}[\\/.-]\\d{2}[\\/.-]\\d{4})";
+// Dia/mês com 1 ou 2 dígitos: a fatura da CTA imprime "3/2/2026".
+const D = "((?<!\\d)\\d{1,2}[\\/.-]\\d{1,2}[\\/.-]\\d{4})";
 const REGRAS_NUMERO = [
   // Prefeitura de São Paulo: "Número da Nota Data e Hora de Emissão Código de Verificação <token> 00000058 02/02/2026 12:23:05"
   { re: new RegExp("N[úu]mero da Nota\\s+Data e Hora de Emiss[ãa]o[\\s\\S]{0,140}?\\b(\\d{6,10})\\s+" + D, "i"), data: 2, fonte: "SP" },
@@ -118,7 +119,7 @@ const REGRAS_DATA = [
   { re: /,?\s*(\d{1,2})\s+de\s+(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i, extenso: true },
 ];
 const MESES = { janeiro: "01", fevereiro: "02", marco: "03", março: "03", abril: "04", maio: "05", junho: "06", julho: "07", agosto: "08", setembro: "09", outubro: "10", novembro: "11", dezembro: "12" };
-const dataBR = s => { const m = String(s || "").match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4})/); return m ? `${m[1]}/${m[2]}/${m[3]}` : null; };
+const dataBR = s => { const m = String(s || "").match(/(?<!\d)(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/); return m ? `${m[1].padStart(2, "0")}/${m[2].padStart(2, "0")}/${m[3]}` : null; };
 
 // ── extração ────────────────────────────────────────────────────────────────
 export function extrairDadosNF(txt) {
