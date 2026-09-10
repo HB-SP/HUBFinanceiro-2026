@@ -7,7 +7,7 @@ import {
 import { fmt, fmtK } from "../../utils";
 import {
   GitCompareArrows, Wallet, TrendingUp, TrendingDown, Sparkles, Receipt,
-  Pencil, Check, Plus, X, Briefcase, Layers,
+  Pencil, Check, Plus, X, Briefcase, Layers, GripVertical, ArrowDownWideNarrow,
   ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown,
 } from "lucide-react";
 
@@ -89,6 +89,7 @@ const ChipsResumo = ({ rows, T }) => {
 
 const lsKeyRecolhidos = (orcId) => `hub_comparativo_recolhidos_${orcId}`;
 const lsKeyRef = (orcId) => `hub_comparativo_ref_${orcId}`;
+const SEM_ORDEM = {};   // referência estável: sem ordem manual salva
 
 // Alternador da referência do delta/selo: orçado da base × realizado da base.
 const RefToggle = ({ valor: refAtual, onChange, blLabel, T }) => {
@@ -125,6 +126,13 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   const [ref, setRef] = useState(() => {
     try { return localStorage.getItem(lsKeyRef(orc.id)) || "real"; } catch { return "real"; }
   });
+  // Arrastar linhas: ordem manual por categoria, salva no próprio orçamento
+  // (orc.comparativo.ordem[categoria] = [rowKey…]) — vale para todos que abrem.
+  // Categoria sem ordem manual segue a automática (maior |Δ| primeiro).
+  const [drag, setDrag] = useState(null);       // { g, key } linha sendo arrastada
+  const [overKey, setOverKey] = useState(null); // linha sob o cursor (alvo)
+  const ordemManual = orc.comparativo?.ordem || SEM_ORDEM;
+  const temOrdemManual = Object.keys(ordemManual).length > 0;
   const IS = iSty(T);
   const bl = orc.baseline || null;
   const diff = useMemo(() => diffBaseline(orc), [orc]);
@@ -141,16 +149,56 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   const V = useMemo(() => {
     const mapRow = r => refReal ? { ...r, delta: r.deltaReal, status: r.statusReal } : r;
     const mapTot = t => refReal ? { ...t, delta: t.deltaReal } : t;
-    const ordena = rows => [...rows].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    const porDelta = rows => [...rows].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    // Com ordem manual: segue a lista salva; linha nova (fora da lista) entra no fim, por |Δ|.
+    const ordena = (rows, gKey) => {
+      const base = porDelta(rows);
+      const lista = ordemManual[gKey];
+      if (!lista) return base;
+      const pos = new Map(lista.map((k, i) => [k, i]));
+      return base.sort((a, b) => (pos.has(a.key) ? pos.get(a.key) : 1e9) - (pos.has(b.key) ? pos.get(b.key) : 1e9));
+    };
     return {
-      grupos: diff.grupos.map(g => ({ ...mapTot(g), rows: ordena(g.rows.map(mapRow)) })),
-      fixos:  diff.fixos.map(s => ({ ...mapTot(s), rows: ordena(s.rows.map(mapRow)) })),
+      grupos: diff.grupos.map(g => ({ ...mapTot(g), gKey: g.key, rows: ordena(g.rows.map(mapRow), g.key) })),
+      fixos:  diff.fixos.map(s => ({ ...mapTot(s), gKey: `sec:${s.secao}`, rows: ordena(s.rows.map(mapRow), `sec:${s.secao}`) })),
       totalBase: diff.totalBase, totalReal: diff.totalReal, totalAtual: diff.totalAtual,
       totalRef: refReal ? diff.totalReal : diff.totalBase,
       delta: refReal ? diff.deltaReal : diff.delta,
       numAddons: refReal ? diff.numAddonsReal : diff.numAddons,
     };
-  }, [diff, refReal]);
+  }, [diff, refReal, ordemManual]);
+
+  // ── Drag & drop (dentro da mesma categoria) ──
+  const podeArrastar = !readOnly;
+  const salvaOrdem = (gKey, lista) => setOrc(prev => ({
+    ...prev,
+    comparativo: { ...(prev.comparativo || {}), ordem: { ...((prev.comparativo || {}).ordem || {}), [gKey]: lista } },
+  }));
+  const limpaOrdem = () => setOrc(prev => ({ ...prev, comparativo: { ...(prev.comparativo || {}), ordem: {} } }));
+  const onDragStartRow = (g, key) => (e) => {
+    setDrag({ g: g.gKey, key });
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", key); } catch {}
+  };
+  const onDragOverRow = (g, key) => (e) => {
+    if (!drag || drag.g !== g.gKey) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (overKey !== key) setOverKey(key);
+  };
+  const onDropRow = (g, key) => (e) => {
+    if (!drag || drag.g !== g.gKey) return;
+    e.preventDefault();
+    const atual = g.rows.map(r => r.key);
+    if (drag.key !== key) {
+      const semDrag = atual.filter(k => k !== drag.key);
+      const idx = semDrag.indexOf(key);
+      semDrag.splice(idx < 0 ? semDrag.length : idx, 0, drag.key);  // solta ANTES da linha alvo
+      salvaOrdem(g.gKey, semDrag);
+    }
+    setDrag(null); setOverKey(null);
+  };
+  const onDragEndRow = () => { setDrag(null); setOverKey(null); };
 
   const salvaRecolhidos = (next) => {
     try { localStorage.setItem(lsKeyRecolhidos(orc.id), JSON.stringify([...next])); } catch {}
@@ -254,10 +302,12 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   const tdBarra = { padding:`7px ${PADX}px`, minWidth:160 };
 
   // Linha de serviço (fixo pareado por baseSubKey edita a base em `itens`).
-  const renderRow = (row, campoBaseGrupo, maxAbs, idx) => {
+  const renderRow = (row, g, campoBaseGrupo, maxAbs, idx) => {
     const campoBase = row.campoBase || campoBaseGrupo;
     const editavel = editando && row.baseItemId;
     const removidoOuSemAtual = row.status === "removido";
+    const arrastando = drag?.key === row.key;
+    const alvo = overKey === row.key && drag && drag.key !== row.key;
     const btnRemover = editavel ? (
       <button title="Remover linha da base" onClick={() => removeBase(row.baseItemId, campoBase)}
         style={{border:"none",background:"none",cursor:"pointer",color:T.danger||"#DC2626",padding:2,display:"flex"}}>
@@ -269,12 +319,24 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
         style={{...IS, width:104, textAlign:"right", padding:"3px 6px", fontSize:11.5}}/>
     );
     return (
-    <tr key={row.key} style={{
-      borderTop:`1px solid ${T.border}`,
-      background: idx % 2 ? (T.surfaceAlt ? `${T.surfaceAlt}66` : "transparent") : "transparent",
-      opacity: removidoOuSemAtual ? 0.6 : 1,
-    }}>
-      <td style={{padding:`7px ${PADX}px 7px 36px`,color:T.text,fontSize:12,fontWeight:500,lineHeight:1.25}}>
+    <tr key={row.key}
+      onDragOver={podeArrastar ? onDragOverRow(g, row.key) : undefined}
+      onDrop={podeArrastar ? onDropRow(g, row.key) : undefined}
+      style={{
+        borderTop: alvo ? `2px solid ${corAtual}` : `1px solid ${T.border}`,
+        background: arrastando ? `${corAtual}14` : idx % 2 ? (T.surfaceAlt ? `${T.surfaceAlt}66` : "transparent") : "transparent",
+        opacity: arrastando ? 0.45 : removidoOuSemAtual ? 0.6 : 1,
+      }}>
+      <td style={{padding:`7px ${PADX}px 7px 14px`,color:T.text,fontSize:12,fontWeight:500,lineHeight:1.25}}>
+        <span style={{display:"inline-flex",alignItems:"flex-start",gap:6}}>
+          {podeArrastar ? (
+            <span draggable onDragStart={onDragStartRow(g, row.key)} onDragEnd={onDragEndRow}
+              title="Arrastar para reordenar dentro da categoria"
+              style={{cursor:"grab",color:T.textSm,opacity:0.55,display:"inline-flex",marginTop:1,flexShrink:0}}>
+              <GripVertical size={13}/>
+            </span>
+          ) : <span style={{width:13,flexShrink:0}}/>}
+          <span>
         {row.label}
         {row.labelBase && row.labelBase.trim().toLowerCase() !== String(row.label).trim().toLowerCase() && (
           <div style={{fontSize:9.5,color:T.textSm,marginTop:1}}
@@ -282,6 +344,8 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
             na base: {row.labelBase}{row.baseItens?.length > 1 ? ` (${row.baseItens.length} linhas)` : ""}
           </div>
         )}
+          </span>
+        </span>
       </td>
       <td className="num" style={numBase("base")}>
         {editavel ? (
@@ -488,12 +552,19 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
           T={T}
           title={`Comparativo · ${bl.label} × ${atualLabel}`}
           subtitle={temReal
-            ? `Δ = orçado ${orc.meta.edicao} − ${refLabel} · linhas ordenadas pela maior diferença · barra = magnitude dentro do bloco`
+            ? `Δ = orçado ${orc.meta.edicao} − ${refLabel} · ${temOrdemManual ? "ordem manual (arraste pela alça)" : "linhas pela maior diferença; arraste pela alça para reordenar"} · barra = magnitude dentro do bloco`
             : "Linha a linha por serviço — selo automático: add-on, aumento, redução ou removido"}
           icon={GitCompareArrows}
           right={
             <span style={{display:"inline-flex",gap:8,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
               {temReal && <RefToggle valor={ref} onChange={trocaRef} blLabel={bl.label} T={T}/>}
+              {!readOnly && temOrdemManual && (
+                <Button T={T} variant="secondary" size="sm" icon={ArrowDownWideNarrow}
+                  title="Desfaz a ordem manual de todas as categorias e volta a ordenar pela maior diferença"
+                  onClick={limpaOrdem}>
+                  Ordem automática
+                </Button>
+              )}
               {!editando && (
                 <Button T={T} variant="secondary" size="sm" icon={tudoRecolhido ? ChevronsUpDown : ChevronsDownUp}
                   onClick={() => setRecolhidos(() => salvaRecolhidos(tudoRecolhido ? new Set() : new Set(chavesTopo)))}>
@@ -528,7 +599,7 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
               {estaAberto("variaveis") && V.grupos.map(g => (g.rows.length > 0 || editando) ? [
                 renderHeaderGrupo(g.label, g.color, g, { chave:g.key, rows:g.rows }),
                 ...(estaAberto(g.key) ? [
-                  ...g.rows.map((row, i) => renderRow(row, "itens", blocos.variaveis.maxAbs, i)),
+                  ...g.rows.map((row, i) => renderRow(row, g, "itens", blocos.variaveis.maxAbs, i)),
                   renderAddLinha("var", g.key),
                 ] : []),
               ] : null)}
@@ -542,7 +613,7 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
                 return [
                   renderHeaderGrupo(sec.secao, "#a855f7", sec, { chave:chaveSec, rows:sec.rows }),
                   ...(secAberta ? [
-                    ...sec.rows.map((row, i) => renderRow(row, "fixos", blocos.fixos.maxAbs, i)),
+                    ...sec.rows.map((row, i) => renderRow(row, sec, "fixos", blocos.fixos.maxAbs, i)),
                     renderAddLinha("fixo", null, sec.secao),
                   ] : []),
                 ];
