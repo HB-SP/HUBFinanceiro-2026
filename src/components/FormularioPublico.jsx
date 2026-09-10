@@ -3,6 +3,7 @@ import LeituraNFForm from "./LeituraNFForm";
 import { divergenciasEnvio } from "../lib/leitorNF";
 // Leitura do PDF × digitado: só avisa e deixa o fornecedor confirmar (decisão do financeiro, 10/09/2026).
 const MSG_DIVERGENCIA = (divs) => `⚠️ O PDF anexado não bate com o que foi digitado:\n\n${divs.map(d => "• " + d.texto).join("\n")}\n\nQuer enviar assim mesmo?\n(Cancelar volta para você corrigir)`;
+const hojeBR = () => new Date().toLocaleDateString("pt-BR"); // dataEnvio automática
 const cnpjDoFornecedor = (nome, lista) => (lista || []).find(f => String(f.apelido || "").trim().toLowerCase() === String(nome || "").trim().toLowerCase())?.cnpj || null;
 
 import { useState, useRef, useEffect } from "react";
@@ -162,15 +163,10 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
         {!nfData.numeroNF.trim() && <p style={{color:"#ef4444",fontSize:11,margin:"4px 0 0"}}>Informe o número da nota fiscal para enviar</p>}
         {nfData.chaveAcesso && <p style={{color:"#059669",fontSize:11,margin:"4px 0 0"}}>{avisoChaveDetectada(nfData.chaveAcesso, nfData.numeroNF)}</p>}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-        <div>
-          <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data de Emissão</label>
-          <DateInput value={nfData.dataEmissao} onChange={v => setNfData(d => ({...d, dataEmissao:v}))} style={IS}/>
-        </div>
-        <div>
-          <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data de Envio</label>
-          <DateInput value={nfData.dataEnvio} onChange={v => setNfData(d => ({...d, dataEnvio:v}))} style={IS}/>
-        </div>
+      {/* "Data de Envio" saiu do formulário (10/09/2026): é preenchida automaticamente com o dia do envio. */}
+      <div style={{marginBottom:14}}>
+        <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Data de Emissão</label>
+        <DateInput value={nfData.dataEmissao} onChange={v => setNfData(d => ({...d, dataEmissao:v}))} style={IS}/>
       </div>
       <div style={{marginBottom:14}}>
         <label style={{color:T.textMd,fontSize:12,display:"block",marginBottom:4}}>Observações (opcional)</label>
@@ -270,7 +266,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
           await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
         }
         submissions.push({
-          id: submissionId, clientRef, ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}), valorNF, rodada: jogo.rodada, jogoId: jogo.id,
+          id: submissionId, clientRef, ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}), dataEnvio: hojeBR(), valorNF, rodada: jogo.rodada, jogoId: jogo.id,
           jogoLabel: `${jogo.mandante} x ${jogo.visitante}`, mandante: jogo.mandante, visitante: jogo.visitante,
           servicosKeys: subs.map(sk => `${jogo.id}_${sk}`),
           servicosLabels: allServicos.filter(s => subs.includes(s.subKey)).map(s => s.subLabel),
@@ -525,7 +521,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
       }
       const submission = {
-        id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}),
+        id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}), dataEnvio: hojeBR(),
         valorNF: parseValorBR(valor),
         mes: mesSel, mesLabel: MESES[mesSel],
         servicoId: servicoSel.servicoId,        // pode ser null (categoria variável)
