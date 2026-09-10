@@ -184,7 +184,8 @@ export function extrairDadosNF(txt) {
 
   // 5) Valor. Texto do DANFSe costuma vir SEM espaços ("ValordoServiço R$1.200,00").
   //    Ordem: líquido → total → valor do serviço → total genérico → maior "R$".
-  const V = "\\s*[^\\d]{0,30}?([\\d.]+,\\d{2})";
+  // Milhar com ponto OU espaço ("36 110,03 BRL" na fatura da Hispasat).
+  const V = "\\s*[^\\d]{0,30}?(\\d{1,3}(?:[ .]\\d{3})*,\\d{2}|\\d+,\\d{2})(?![\\d])";
   // "Valor Líquido" só com o número logo em seguida — em São Caetano o rótulo
   // "Valor Líquido PIS - Apuração Própria 0,00" é outra coluna.
   const vm = T.match(/Valor\s*L[íi]quido(?:\s*da\s*NFS-?e)?\s*[:=]?\s*(?:R\$)?\s*([\d.]+,\d{2})/i)
@@ -198,7 +199,7 @@ export function extrairDadosNF(txt) {
   const totalSemNumero = /Valor\s*Total\s*(?:da\s*)?Fatura(?!\s*[:=]?\s*(?:R\$)?\s*[\d.]+,\d{2})/i.test(T);
   if (vm && !(totalSemNumero && /Fatura\s*Valor\s*R\$/i.test(T))) { r.valor = parseBR(vm[1]); r.valorFonte = /Total|L[íi]quido/i.test(vm[0]) ? "total" : "item"; }
   else {
-    const dinheiro = [...T.matchAll(/(?<![\d,.])(\d{1,3}(?:\.\d{3})*,\d{2})(?![\d])/g)].map(x => parseBR(x[1])).filter(x => x > 0);
+    const dinheiro = [...T.matchAll(/(?<![\d,.])(\d{1,3}(?:[ .]\d{3})*,\d{2})(?![\d])/g)].map(x => parseBR(x[1])).filter(x => x > 0);
     if (dinheiro.length) {
       const max = Math.max(...dinheiro);
       const outros = dinheiro.filter(v => v !== max);
