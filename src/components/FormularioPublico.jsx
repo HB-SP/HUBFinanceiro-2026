@@ -223,10 +223,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
   // O que falta na etapa atual — mostrado acima dos botões enquanto "Próximo"/"Enviar" está travado.
   const faltando = () => {
     if (canNext()) return [];
-    if (step === 0) return ["selecionar a rodada"];
-    if (step === 1) { const r = qtdJogos - jogosSel.length; return [r > 0 ? `selecionar ${r} jogo${r > 1 ? "s" : ""} (${jogosSel.length} de ${qtdJogos})` : `selecionar exatamente ${qtdJogos} jogo${qtdJogos > 1 ? "s" : ""} (${jogosSel.length} marcados)`]; }
-    if (step === 2) return ["marcar pelo menos um serviço"];
-    if (step === 3) return ["informar pelo menos um valor"];
+    if (step !== 4) return []; // aviso só na etapa da Nota Fiscal (decisão 10/09)
     const f = []; if (!arquivo) f.push("anexar a nota fiscal em PDF"); if (!nfData.fornecedor) f.push("informar o fornecedor"); if (!nfData.numeroNF.trim()) f.push("informar o número da nota"); return f;
   };
 
@@ -520,9 +517,7 @@ function FormMensal({ fornecedores, onDone, T }) {
   // O que falta na etapa atual — mostrado acima dos botões enquanto "Próximo"/"Enviar" está travado.
   const faltando = () => {
     if (canNext()) return [];
-    if (step === 0) return ["selecionar o mês"];
-    if (step === 1) return ["selecionar o serviço"];
-    if (step === 2) return ["informar o valor"];
+    if (step !== 3) return []; // aviso só na etapa da Nota Fiscal (decisão 10/09)
     const f = []; if (!arquivo) f.push("anexar a nota fiscal em PDF"); if (!nfData.fornecedor) f.push("informar o fornecedor"); if (!nfData.numeroNF.trim()) f.push("informar o número da nota"); return f;
   };
 
