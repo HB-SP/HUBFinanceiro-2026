@@ -5,6 +5,12 @@
 // LEITURA: nada aqui grava — quem decide continua sendo o operador na
 // conferência. PDF escaneado (sem texto) devolve layout "sem texto".
 //
+// As regras de rótulo foram aprendidas em 10/09/2026 no acervo real (1.163 PDFs
+// com texto): NFS-e padrão nacional, Prefeitura de São Paulo, São Caetano,
+// Ribeirão Preto, DANFE/CT-e, faturas de locação (RM Digital, Loc-Line, De
+// Nadai, CTA), recibos (Conecta, LineUP) e invoice (Intelsat). Cada regra exige
+// um rótulo explícito antes do dado — nunca "o primeiro número que aparecer".
+//
 // O pdf.js é carregado sob demanda (import dinâmico) para não pesar o bundle
 // de quem nunca abre a aba Recebidas.
 
@@ -20,6 +26,7 @@ const parseBR = s => {
   return isNaN(n) ? null : n;
 };
 const numeroDeChave = k => { const d = dig(k); return d.length >= 44 ? String(parseInt(d.slice(23, 36), 10)) : null; };
+const limpaNum = s => { const d = dig(s); return d ? String(parseInt(d, 10)) : null; };
 
 let pdfjsPromise = null;
 async function carregarPdfjs() {
@@ -55,40 +62,129 @@ export async function extrairTextoPDF(dataUrl, maxPaginas = 2) {
   return { texto, mime: m[1], paginas: doc.numPages };
 }
 
-// ── extração por regex (padrão nacional + prefeituras comuns + recibos) ──
-// Mesmas regras do script de varredura (validado em ~1.000 PDFs reais em 09/2026).
+// ── Rótulos de NÚMERO, do mais específico ao mais genérico ─────────────────
+// `data`: índice do grupo que traz a data de emissão junto (layouts em que o
+// cabeçalho vem antes e os valores depois, na mesma ordem).
+const D = "(\\d{2}[\\/.-]\\d{2}[\\/.-]\\d{4})";
+const REGRAS_NUMERO = [
+  // Prefeitura de São Paulo: "Número da Nota Data e Hora de Emissão Código de Verificação <token> 00000058 02/02/2026 12:23:05"
+  { re: new RegExp("N[úu]mero da Nota\\s+Data e Hora de Emiss[ãa]o[\\s\\S]{0,140}?\\b(\\d{6,10})\\s+" + D, "i"), data: 2, fonte: "SP" },
+  // Padrão nacional (DANFSe): "Número da NFS-e 20" (texto às vezes sem espaços)
+  { re: /N[úu]mero\s*(?:da\s*)?NFS-?e\s*[:#nº°]?\s*(\d{1,12})\b/i, fonte: "NFS-e" },
+  { re: /NFS-?e\s*(?:n[ºo°.]|N[úu]mero)\s*:?\s*(\d{1,12})\b/i, fonte: "NFS-e" },
+  // São Caetano do Sul e afins: cabeçalho "Número da NFS-e ..." e os valores depois "216 18/02/2026"
+  { re: new RegExp("N[úu]mero da NFS-?e[\\s\\S]{0,200}?\\b(\\d{1,10})\\s+" + D, "i"), data: 2, fonte: "NFS-e cabeçalho" },
+  // São Caetano (2º modelo): "Série RPS RPS NFS-e Substituída 258 NFS-e Código de Verificação"
+  { re: /NFS-?e\s+Substitu[íi]da\s+(\d{1,10})\s+NFS-?e\s+C[óo]digo/i, fonte: "NFS-e São Caetano" },
+  // "NOTA FISCAL Nº 96", "Nota Fiscal Eletrônica de Serviços Nº: 12"
+  { re: /Nota\s*Fiscal(?:\s*Eletr[ôo]nica)?(?:\s*de\s*Servi[çc]os?)?\s*(?:-\s*)?N[º°o.]+\s*:?\s*(\d{1,10})\b/i, fonte: "Nota Fiscal Nº" },
+  { re: /N[úu]mero\s*(?:da\s*)?Nota(?:\s*Fiscal)?(?:\s*de\s*Servi[çc]os?)?\s*:?\s*(\d{1,12})\b/i, fonte: "Número da Nota" },
+  // DANFE: "NF-e Nº. 000.000.650"
+  { re: /NF-?e\s*N[º°o.]+\s*:?\s*((?:\d{1,3}\.){0,3}\d{1,3})(?![\d])/i, fonte: "NF-e Nº" },
+  // Ribeirão Preto ("Número 65 Data de emissão"), CT-e ("SÉRIE 1 NÚMERO 2081").
+  // Exige dígitos logo depois — "Número de Inscrição"/"Número do RPS" não entram.
+  { re: /\bN[úu]mero\s*:?\s+(\d{1,10})(?![\d.\/-])/i, fonte: "Número" },
+  // Faturas: "FATURA Nº 4804", "FATURA DE LOCAÇÃO Nº FAT-011841", "FATURA DE LOCAÇÃO - N° 109/2026", "Fatura: 205"
+  { re: /Fatura(?:\s+de\s+Loca[çc][ãa]o)?\s*(?:-\s*)?(?:N[º°o.]+\s*:?|:)\s*(?:[A-Z]{2,5}-)?(\d{1,10})(?:\/\d{2,4})?(?![\d])/i, fonte: "Fatura Nº" },
+  // CTA Transmissões: cabeçalho "Fatura Nº Fatura Valor R$ Data da emissão" e depois "2026098 R$ 5.600,00 08/09/2026"
+  { re: new RegExp("Fatura\\s*N[º°o.]*\\s+Fatura\\s+Valor[^\\d]{0,40}(\\d{4,10})\\s+R\\$\\s*[\\d.,]+\\s+" + D, "i"), data: 2, fonte: "Fatura CTA" },
+  { re: /Fatura\s*N[º°o.]*\s+Fatura\s+Valor[^\d]{0,40}(\d{4,10})\b/i, fonte: "Fatura CTA" },
+  // De Nadai: "De locação constantes da Fatura de Prestação de Serviços. 4779"
+  { re: /Fatura de Presta[çc][ãa]o de Servi[çc]os\.?\s+(\d{2,8})\b/i, fonte: "Fatura De Nadai" },
+  // Recibos: "RECIBO N.º: 26024", "Recibo nº : 17", "Recibo 12"
+  { re: /Recibo\s*(?:N[º°.o]*\s*)?:?\s*(\d{1,8})\b/i, fonte: "Recibo" },
+  // Invoice (Intelsat/SES): "Invoice No. Customer No. Page 2670007477"
+  { re: /Invoice\s*(?:No\.?|Number|#|ID)?\s*(?:Customer\s*No\.?\s*Page\s*)?:?\s*(\d{4,12})\b/i, fonte: "Invoice" },
+  // Sistema próprio (Contra Ataque): "Venda 202577 19/02/2026"
+  { re: new RegExp("\\bVenda\\s+(\\d{3,10})\\s+" + D, "i"), data: 2, fonte: "Venda" },
+];
+
+// ── Rótulos de DATA DE EMISSÃO ──────────────────────────────────────────────
+const REGRAS_DATA = [
+  // Padrão nacional: "Data e Hora da emissão da NFS-e 23/02/2026" (Competência vem antes e NÃO é a emissão)
+  new RegExp("Data\\s*e\\s*Hora\\s*d[ae]\\s*Emiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
+  new RegExp("Data\\s*d[ae]\\s*Emiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
+  new RegExp("\\bEmiss[ãa]o(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
+  // Loc-Line: cabeçalho "PERÍODO DE REFERÊNCIA DATA DE EMISSÃO" e valores "EVENTO : 14/03/2026 11:11 - 14/03/2026 11:11 16/03/2026"
+  { re: new RegExp("EVENTO\\s*:\\s*" + D + "[\\s\\d:]*-\\s*" + D + "[\\s\\d:]*\\s" + D, "i"), grupo: 3 },
+  new RegExp("Emitid[ao]\\s*em\\s*:?\\s*" + D, "i"),
+  new RegExp("Document\\s*date\\s*:?\\s*" + D, "i"),
+  new RegExp("Compet[êe]ncia(?:\\s*da\\s*NFS-?e)?\\s*:?\\s*" + D, "i"),
+  // "São Paulo, 22 de Abril de 2026." (faturas de locação) → dd/mm/aaaa
+  { re: /,?\s*(\d{1,2})\s+de\s+(janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i, extenso: true },
+];
+const MESES = { janeiro: "01", fevereiro: "02", marco: "03", março: "03", abril: "04", maio: "05", junho: "06", julho: "07", agosto: "08", setembro: "09", outubro: "10", novembro: "11", dezembro: "12" };
+const dataBR = s => { const m = String(s || "").match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4})/); return m ? `${m[1]}/${m[2]}/${m[3]}` : null; };
+
+// ── extração ────────────────────────────────────────────────────────────────
 export function extrairDadosNF(txt) {
-  const T = String(txt || "").replace(/ /g, " ").replace(/[ \t]+/g, " ");
+  // Todo espaço em branco (inclusive quebra de linha) vira um espaço: rótulos
+  // como "Número da\nNFS-e" precisam casar com as regras escritas em uma linha.
+  const T = String(txt || "").replace(/\s+/g, " ");
   const r = { layout: "desconhecido", numero: null, chave: null, cnpjs: [], emissao: null, valor: null, textoLen: T.length };
   if (T.length < 40) { r.layout = "sem texto"; return r; }
-  const chave = (T.match(/\b(\d{50})\b/) || T.match(/Chave de Acesso[^0-9]{0,40}((?:\d[\s.]?){50})/i) || [])[1];
-  if (chave) { r.chave = dig(chave); r.numero = numeroDeChave(r.chave); r.layout = "NFS-e padrão nacional"; }
+
+  // 1) Chave de acesso (fonte mais confiável do número)
+  const chave50 = (T.match(/\b(\d{50})\b/) || T.match(/Chave de Acesso[^0-9]{0,40}((?:\d[\s.]?){50})/i) || [])[1];
+  if (chave50) { r.chave = dig(chave50); r.numero = numeroDeChave(r.chave); r.numeroFonte = "chave NFS-e"; r.layout = "NFS-e padrão nacional"; }
   if (/NFS-?e/i.test(T) && !r.layout.startsWith("NFS")) r.layout = "NFS-e municipal";
   if (/recibo/i.test(T) && !/NFS-?e|nota fiscal/i.test(T)) r.layout = "recibo";
-  if (/DANFE|NF-e/i.test(T) && !/NFS/i.test(T)) r.layout = "NF-e (DANFE)";
-  // NF-e de mercadoria (DANFE): chave de 44 dígitos, número nas posições 25–33.
-  if (!r.chave) { const k44 = (T.match(/\b(\d{44})\b/) || T.match(/Chave de Acesso[^0-9]{0,40}((?:\d[\s.]?){44})/i) || [])[1]; if (k44) { r.chave = dig(k44); r.numero = String(parseInt(r.chave.slice(25, 34), 10) || "") || null; if (r.layout === "desconhecido") r.layout = "NF-e (DANFE)"; } }
-  // Rótulo impresso — quando há chave, serve de segunda confirmação do número.
-  const rot = T.match(/N[úu]mero\s*(?:da\s*)?NFS-?e\s*[:#nº°]?\s*(\d{1,12})\b/i)
-    || T.match(/NFS-?e\s*(?:n[ºo°.]|N[úu]mero)\s*:?\s*(\d{1,12})\b/i)
-    || T.match(/N[úu]mero\s*(?:da\s*)?Nota(?:\s*Fiscal)?(?:\s*de\s*Servi[çc]os?)?\s*:?\s*(\d{1,12})\b/i)
-    || T.match(/\bRecibo\s*(?:n[ºo°.]?\s*)?(\d{1,8})\b/i)
-    || T.match(/\bFatura\s*(?:n[ºo°.]?\s*)?(\d{1,8})\b/i);
-  if (rot) r.numeroImpresso = String(parseInt(dig(rot[1]), 10) || "");
-  if (!r.numero && r.numeroImpresso) r.numero = r.numeroImpresso;
+  if (/DANFE|NF-e|DACTE|CT-e/i.test(T) && !/NFS/i.test(T)) r.layout = "NF-e (DANFE)";
+  if (/\bInvoice\b/i.test(T) && r.layout === "desconhecido") r.layout = "invoice";
+  if (/\bFatura\b/i.test(T) && r.layout === "desconhecido") r.layout = "fatura";
+  if (/Prefeitura do Munic[íi]pio de S[ãa]o Paulo/i.test(T)) r.layout = "NFS-e São Paulo";
+  // NF-e/CT-e de mercadoria: chave de 44 dígitos, número nas posições 25–33.
+  if (!r.chave) {
+    const k44 = (T.match(/\b(\d{44})\b/) || T.match(/Chave de Acesso[^0-9]{0,40}((?:\d[\s.]?){44})/i) || [])[1];
+    if (k44) { r.chave = dig(k44); r.numero = String(parseInt(r.chave.slice(25, 34), 10) || "") || null; r.numeroFonte = "chave NF-e"; if (r.layout === "desconhecido") r.layout = "NF-e (DANFE)"; }
+  }
+
+  // 2) Rótulo impresso — vira o número quando não há chave; com chave, é a
+  //    segunda confirmação (numeroImpresso).
+  for (const regra of REGRAS_NUMERO) {
+    const m = T.match(regra.re);
+    if (!m) continue;
+    const n = limpaNum(m[1]);
+    if (!n) continue;
+    r.numeroImpresso = n; r.numeroImpressoFonte = regra.fonte;
+    if (regra.data && m[regra.data]) r.emissaoRotulo = dataBR(m[regra.data]);
+    break;
+  }
+  if (!r.numero && r.numeroImpresso) { r.numero = r.numeroImpresso; r.numeroFonte = r.numeroImpressoFonte; }
+
+  // 3) CNPJs / CPF
   r.cnpjs = [...new Set((T.match(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g) || []).map(dig).filter(d => d.length === 14))];
   r.temCPF = /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/.test(T);
-  const dmRot = T.match(/(?:Data\s*e\s*Hora\s*d[ae]\s*Emiss[ãa]o|Data\s*d[ae]\s*Emiss[ãa]o|Emiss[ãa]o|Emitida\s*em|Compet[êe]ncia(?:\s*da\s*NFS-?e)?)\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
-  const dm = dmRot || T.match(/(\d{2}\/\d{2}\/\d{4})/);
-  if (dm) { r.emissao = dm[1]; r.emissaoFonte = dmRot ? "rótulo" : "primeira data"; }
-  // Texto do DANFSe costuma vir SEM espaços ("ValordoServiço R$1.200,00").
-  // Ordem: líquido → total → valor do serviço → total genérico → maior "R$".
+
+  // 4) Emissão: rótulo explícito → data que veio junto do número → primeira data do texto
+  for (const regra of REGRAS_DATA) {
+    if (regra.extenso) {
+      const m = T.match(regra.re);
+      if (m) { r.emissao = `${m[1].padStart(2, "0")}/${MESES[m[2].toLowerCase()] || "??"}/${m[3]}`; r.emissaoFonte = "rótulo"; break; }
+      continue;
+    }
+    const m = T.match(regra.re || regra);
+    if (m) { r.emissao = dataBR(m[regra.grupo || 1]); r.emissaoFonte = "rótulo"; break; }
+  }
+  if (!r.emissao && r.emissaoRotulo) { r.emissao = r.emissaoRotulo; r.emissaoFonte = "rótulo"; }
+  if (!r.emissao) {
+    // Primeira data do texto que NÃO seja vencimento/validade/período (De Nadai
+    // traz "VENCIMENTO 07/04/2026" antes da emissão).
+    for (const m of T.matchAll(/(\d{2}\/\d{2}\/\d{4})/g)) {
+      const antes = T.slice(Math.max(0, m.index - 40), m.index);
+      if (/venc|validade|per[íi]odo|prazo|pagamento/i.test(antes)) continue;
+      r.emissao = m[1]; r.emissaoFonte = "primeira data"; break;
+    }
+  }
+
+  // 5) Valor. Texto do DANFSe costuma vir SEM espaços ("ValordoServiço R$1.200,00").
+  //    Ordem: líquido → total → valor do serviço → total genérico → maior "R$".
   const V = "\\s*[^\\d]{0,30}?([\\d.]+,\\d{2})";
   const vm = T.match(new RegExp("Valor\\s*L[íi]quido(?:\\s*da\\s*NFS-?e)?" + V, "i"))
-    || T.match(new RegExp("Valor\\s*Total\\s*d[ao]\\s*(?:Nota|NFS-?e|Servi[çc]os?)" + V, "i"))
+    || T.match(new RegExp("Valor\\s*Total\\s*d[ao]\\s*(?:Nota|NFS-?e|Servi[çc]os?|Fatura|Recibo)" + V, "i"))
     || T.match(new RegExp("Valor\\s*d[oa]s?\\s*Servi[çc]os?" + V, "i"))
-    || T.match(new RegExp("Valor\\s*(?:Total|Bruto)" + V, "i"))
-    || T.match(new RegExp("Total\\s*(?:Geral|a\\s*Pagar|da\\s*Nota)?" + V, "i"));
+    || T.match(new RegExp("Valor\\s*(?:Total|Bruto|da\\s*Fatura|do\\s*Recibo)" + V, "i"))
+    || T.match(new RegExp("Total\\s*(?:Geral|a\\s*Pagar|da\\s*Nota|da\\s*Fatura|Amount)?" + V, "i"));
   if (vm) { r.valor = parseBR(vm[1]); r.valorFonte = /Total|L[íi]quido/i.test(vm[0]) ? "total" : "item"; }
   else {
     const todos = [...T.matchAll(/R\$\s*([\d.]+,\d{2})/g)].map(x => parseBR(x[1])).filter(x => x > 0);
@@ -97,13 +193,17 @@ export function extrairDadosNF(txt) {
   return r;
 }
 
+// dd/mm/aaaa completo, ou dd/mm quando o Hub gravou sem ano (notas antigas).
 const normData = s => {
   const t = String(s || "");
   let m = t.match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
   if (m) return `${m[1]}/${m[2]}/${m[3]}`;
   m = t.match(/(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  m = t.match(/^\s*(\d{2})\/(\d{2})\s*$/);
+  return m ? `${m[1]}/${m[2]}` : null;
 };
+const mesmaData = (a, b) => a && b && (a.length === b.length ? a === b : a.slice(0, 5) === b.slice(0, 5));
 const fmtBR = v => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Cruza o que o PDF diz com a nota/submissão. Devolve checagens
@@ -113,19 +213,19 @@ export function compararLeitura(dados, nota, fornecedorCadastro) {
   const checks = [];
   // Número: o nº do Hub pode ser a chave colada — aí vale o nº embutido nela.
   const hubNumInfo = analisarNumeroNF(nota?.numeroNF);
-  const hubNumDig = dig(hubNumInfo?.numero);
-  const hubNum = hubNumDig ? String(parseInt(hubNumDig, 10)) : null;
-  const pdfNum = dados.numero ? String(parseInt(dados.numero, 10)) : null;
-  checks.push({ campo: "Nº", pdf: pdfNum, hub: hubNum, ok: pdfNum && hubNum ? pdfNum === hubNum : null });
+  const hubNum = limpaNum(hubNumInfo?.numero);
+  const pdfNum = limpaNum(dados.numero);
+  checks.push({ campo: "Nº", pdf: pdfNum, hub: hubNum, ok: pdfNum && hubNum ? pdfNum === hubNum : null, fonte: dados.numeroFonte });
   // Chave: se as duas existem, têm de ser idênticas.
   const hubChave = hubNumInfo?.chaveAcesso || (nota?.chaveAcesso ? dig(nota.chaveAcesso) : null);
   if (dados.chave && hubChave) checks.push({ campo: "Chave", pdf: "…" + dados.chave.slice(-8), hub: "…" + hubChave.slice(-8), ok: dados.chave === hubChave });
   // Emissão
   const hubData = normData(nota?.dataEmissao);
   const pdfData = normData(dados.emissao);
-  checks.push({ campo: "Emissão", pdf: pdfData, hub: hubData, ok: pdfData && hubData ? pdfData === hubData : null, fraco: dados.emissaoFonte === "primeira data" });
+  checks.push({ campo: "Emissão", pdf: pdfData, hub: hubData, ok: pdfData && hubData ? mesmaData(pdfData, hubData) : null, fraco: dados.emissaoFonte === "primeira data" });
   // Valor
-  const hubValor = nota?.valorNF ?? nota?.valor ?? (nota?.servicosValores ? Object.values(nota.servicosValores).reduce((s, v) => s + (Number(v) || 0), 0) : null);
+  const hubBruto = nota?.valorNF ?? nota?.valor ?? (nota?.servicosValores ? Object.values(nota.servicosValores).reduce((s, v) => s + (Number(v) || 0), 0) : null);
+  const hubValor = typeof hubBruto === "string" ? parseBR(hubBruto) : (hubBruto == null || isNaN(Number(hubBruto)) ? null : Number(hubBruto));
   const pdfValor = dados.valor;
   checks.push({
     campo: "Valor",
