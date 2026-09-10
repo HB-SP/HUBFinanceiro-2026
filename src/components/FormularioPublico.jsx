@@ -4,7 +4,7 @@ import { Sun, Moon } from "lucide-react";
 import { Pill } from "./shared";
 import { DateInput } from "./ui";
 import { CATS } from "../constants";
-import { getState, appendState, fileToDataUrl, saveNFFile, hashDataUrl, publicoJogos, publicoFornecedores } from "../lib/supabase";
+import { getState, appendState, fileToDataUrl, saveNFFilePublico, hashDataUrl, publicoJogos, publicoFornecedores } from "../lib/supabase";
 import { nfDuplicadaServidor } from "../lib/dedupeNF";
 
 // Mensagem quando o servidor acusa que esta NF já entrou antes (mesmo
@@ -254,7 +254,7 @@ function FormJogo({ jogos, fornecedores, onDone, T }) {
         const submissionId = Date.now() + jogoId;
         let hasFile = false;
         if (dataUrlNF) {
-          try { await saveNFFile(submissionId, dataUrlNF); hasFile = true; } catch(_){}
+          await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
         }
         submissions.push({
           id: submissionId, clientRef, ...nfData, ...(fileHash ? { fileHash } : {}), valorNF, rodada: jogo.rodada, jogoId: jogo.id,
@@ -504,7 +504,7 @@ function FormMensal({ fornecedores, onDone, T }) {
       const submissionId = Date.now();
       let hasFile = false;
       if (dataUrlNF) {
-        try { await saveNFFile(submissionId, dataUrlNF); hasFile = true; } catch(_){}
+        await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
       }
       const submission = {
         id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}),

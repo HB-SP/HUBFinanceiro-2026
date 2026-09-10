@@ -258,6 +258,22 @@ export async function saveNFFile(notaId, dataUrl) {
   return hashDataUrl(dataUrl);
 }
 
+// Formulário PÚBLICO grava o PDF com INSERT puro. O setState usa upsert
+// (INSERT ... ON CONFLICT DO UPDATE), e o Postgres exige que o anon possa LER e
+// ATUALIZAR a linha para o upsert passar — desde 09/09 (passo 3) o anon não lê
+// nf_file_*, então o upsert era recusado pelo RLS e o PDF se perdia em silêncio
+// (submissão chegava com hasFile=false). O id da submissão é novo, nunca
+// conflita; a policy de INSERT do anon permite nf_file_*. Erro aqui SOBE para o
+// formulário avisar o fornecedor em vez de aceitar a NF sem arquivo.
+export async function saveNFFilePublico(notaId, dataUrl) {
+  const { error } = await comTimeout(
+    supabase.from("app_state").insert({ key: `nf_file_${notaId}`, value: dataUrl, updated_at: new Date().toISOString() }),
+    `anexar arquivo da NF`
+  );
+  if (error) throw new Error("não foi possível anexar o arquivo (" + (error.message || error.code) + "). Tente enviar de novo.");
+  return hashDataUrl(dataUrl);
+}
+
 export async function getNFFile(notaId) {
   return getState(`nf_file_${notaId}`);
 }

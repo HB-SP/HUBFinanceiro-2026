@@ -2,7 +2,7 @@ import { patchNumeroNF, avisoChaveDetectada } from "../lib/nfNumero";
 import { useState, useRef, useEffect } from "react";
 import { Sun, Moon } from "lucide-react";
 import { DateInput } from "./ui";
-import { getState, appendState, fileToDataUrl, saveNFFile, hashDataUrl, publicoJogos, publicoFornecedores } from "../lib/supabase";
+import { getState, appendState, fileToDataUrl, saveNFFilePublico, hashDataUrl, publicoJogos, publicoFornecedores } from "../lib/supabase";
 import { nfDuplicadaServidor } from "../lib/dedupeNF";
 
 // Mensagem quando o servidor acusa que esta NF já entrou antes (mesmo
@@ -238,7 +238,7 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
       if (dup?.dup) { alert(MSG_DUPLICADA(nfData.numeroNF)); setSubmitting(false); return; }
 
       if (dataUrlNF) {
-        try { await saveNFFile(submissionId, dataUrlNF); hasFile = true; } catch(_){}
+        await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
       }
 
       for (const jogoId of jogosSel) {
@@ -499,7 +499,7 @@ function FormMensal({ fornecedores, onDone, T }) {
       const submissionId = Date.now();
       let hasFile = false;
       if (dataUrlNF) {
-        try { await saveNFFile(submissionId, dataUrlNF); hasFile = true; } catch(_){}
+        await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
       }
       const submission = {
         id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}),
