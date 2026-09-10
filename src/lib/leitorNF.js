@@ -180,7 +180,9 @@ export function extrairDadosNF(txt) {
   // 5) Valor. Texto do DANFSe costuma vir SEM espaços ("ValordoServiço R$1.200,00").
   //    Ordem: líquido → total → valor do serviço → total genérico → maior "R$".
   const V = "\\s*[^\\d]{0,30}?([\\d.]+,\\d{2})";
-  const vm = T.match(new RegExp("Valor\\s*L[íi]quido(?:\\s*da\\s*NFS-?e)?" + V, "i"))
+  // "Valor Líquido" só com o número logo em seguida — em São Caetano o rótulo
+  // "Valor Líquido PIS - Apuração Própria 0,00" é outra coluna.
+  const vm = T.match(/Valor\s*L[íi]quido(?:\s*da\s*NFS-?e)?\s*[:=]?\s*(?:R\$)?\s*([\d.]+,\d{2})/i)
     || T.match(new RegExp("Valor\\s*Total\\s*d[ao]\\s*(?:Nota|NFS-?e|Servi[çc]os?|Fatura|Recibo)" + V, "i"))
     || T.match(new RegExp("Valor\\s*d[oa]s?\\s*Servi[çc]os?" + V, "i"))
     || T.match(new RegExp("Valor\\s*(?:Total|Bruto|da\\s*Fatura|do\\s*Recibo)" + V, "i"))
