@@ -2,22 +2,23 @@ import { useMemo, useState } from "react";
 import { FONT, iSty } from "../../constants";
 import { Card, SectionHeader, Stat, Button } from "../ui";
 import {
-  diffBaseline, novaBaseline, GRUPOS_COMPARATIVO,
+  diffBaseline, novaBaseline, baselineTemRealizado, GRUPOS_COMPARATIVO,
 } from "../../data/orcamentos";
 import { fmt, fmtK } from "../../utils";
 import {
-  GitCompareArrows, Wallet, TrendingUp, TrendingDown, Sparkles,
+  GitCompareArrows, Wallet, TrendingUp, TrendingDown, Sparkles, Receipt,
   Pencil, Check, Plus, X, Briefcase, Layers,
   ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown,
 } from "lucide-react";
 
 // Selos automáticos do comparativo — a cor fala de CUSTO (aumento = vermelho).
 const SELOS = {
-  addon:    { label: "ADD-ON",    color: "#8b5cf6" },
-  aumento:  { label: "↑ aumento", color: "#DC2626" },
-  reducao:  { label: "↓ redução", color: "#16A34A" },
-  removido: { label: "removido",  color: "#6b7280" },
-  igual:    { label: "=",         color: null },
+  addon:         { label: "ADD-ON",        color: "#8b5cf6" },
+  aumento:       { label: "↑ aumento",     color: "#DC2626" },
+  reducao:       { label: "↓ redução",     color: "#16A34A" },
+  removido:      { label: "removido",      color: "#6b7280" },
+  nao_realizado: { label: "não realizado", color: "#D97706" },   // orçado na base, gasto zero
+  igual:         { label: "=",             color: null },
 };
 
 const Selo = ({ status, T }) => {
@@ -36,11 +37,12 @@ const deltaCor = (delta, T) => delta > 0 ? "#DC2626" : delta < 0 ? "#16A34A" : T
 // Selo do bloco inteiro (variáveis/fixos): só sinal do total, sem "add-on".
 const statusBloco = (b) => b.delta > 0 ? "aumento" : b.delta < 0 ? "reducao" : "igual";
 const fmtDelta = (delta) => delta === 0 ? "—" : `${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))}`;
+const fmtReal = (real) => real == null ? "—" : fmt(real);
 
 // Resumo compacto exibido no cabeçalho quando a categoria está recolhida:
 // nº de linhas + contagem por selo, para não perder o sinal do que mudou.
 const ChipsResumo = ({ rows, T }) => {
-  const contagem = { addon: 0, aumento: 0, reducao: 0, removido: 0 };
+  const contagem = { addon: 0, aumento: 0, reducao: 0, removido: 0, nao_realizado: 0 };
   rows.forEach(r => { if (contagem[r.status] !== undefined) contagem[r.status]++; });
   const chips = Object.entries(contagem).filter(([, n]) => n > 0);
   return (
@@ -63,11 +65,12 @@ const ChipsResumo = ({ rows, T }) => {
 };
 
 const lsKeyRecolhidos = (orcId) => `hub_comparativo_recolhidos_${orcId}`;
+const lsKeyRef = (orcId) => `hub_comparativo_ref_${orcId}`;
 
-const thStyle = (T, left) => ({
+const thStyle = (T, left, destaque) => ({
   padding:"11px 16px",
   textAlign:left ? "left" : "right",
-  color:T.textSm,
+  color: destaque ? T.text : T.textSm,
   fontSize:10,
   fontWeight:700,
   letterSpacing:"0.06em",
@@ -76,26 +79,70 @@ const thStyle = (T, left) => ({
   borderBottom:`1px solid ${T.border}`,
 });
 
+// Alternador da referência do delta/selo: orçado da base × realizado da base.
+const RefToggle = ({ valor: refAtual, onChange, blLabel, T }) => {
+  const opts = [{ k:"real", label:`Δ vs realizado ${blLabel}` }, { k:"orc", label:`Δ vs orçado ${blLabel}` }];
+  return (
+    <span style={{display:"inline-flex",border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+      {opts.map(o => {
+        const on = o.k === refAtual;
+        return (
+          <button key={o.k} onClick={() => onChange(o.k)}
+            style={{
+              border:"none", cursor:"pointer", fontSize:11, fontWeight:on ? 700 : 500, padding:"5px 10px",
+              background: on ? (T.info || "#2563EB") : "transparent", color: on ? "#fff" : T.textMd,
+            }}>{o.label}</button>
+        );
+      })}
+    </span>
+  );
+};
+
 // ─── COMPARATIVO EDIÇÃO × EDIÇÃO ─────────────────────────────────────────────
-// Base congelada (ex: orçamento aprovado de 2026) × orçamento atual, linha a
-// linha, com selo automático. A base é editável aqui mesmo (modo edição).
+// Base congelada (orçado aprovado + realizado da edição anterior) × orçamento
+// atual, linha a linha, com selo automático. A base é editável aqui mesmo.
+// Quando a base tem realizado, o delta e o selo tomam o REALIZADO como
+// referência por padrão — é o argumento junto à entidade ("gastamos X, pedimos Y").
 export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   const [editando, setEditando] = useState(false);
-  const [novaLinha, setNovaLinha] = useState(null); // { grupo|secao, label, valor, subKey }
+  const [novaLinha, setNovaLinha] = useState(null); // { grupo|secao, label, valor, realizado, subKey }
   // Categorias recolhidas (chaves de grupo, "fixos" e "sec:{seção}") — persiste
   // por orçamento no localStorage; no modo edição tudo fica sempre aberto.
   const [recolhidos, setRecolhidos] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(lsKeyRecolhidos(orc.id)) || "[]")); }
     catch { return new Set(); }
   });
+  const [ref, setRef] = useState(() => {
+    try { return localStorage.getItem(lsKeyRef(orc.id)) || "real"; } catch { return "real"; }
+  });
   const IS = iSty(T);
   const bl = orc.baseline || null;
   const diff = useMemo(() => diffBaseline(orc), [orc]);
+  const temReal = diff.temRealizado;
+  const refReal = temReal && ref === "real";
+  const mostraReal = temReal || editando;   // editando sem dado: coluna aparece pra preencher
+  const nCols = mostraReal ? 6 : 5;
+  const refLabel = refReal ? `realizado ${bl?.label || ""}` : `orçado ${bl?.label || ""}`;
+
+  // Visão da tabela conforme a referência escolhida: unifica delta/status.
+  const V = useMemo(() => {
+    const mapRow = r => refReal ? { ...r, delta: r.deltaReal, status: r.statusReal } : r;
+    const mapTot = t => refReal ? { ...t, delta: t.deltaReal } : t;
+    return {
+      grupos: diff.grupos.map(g => ({ ...mapTot(g), rows: g.rows.map(mapRow) })),
+      fixos:  diff.fixos.map(s => ({ ...mapTot(s), rows: s.rows.map(mapRow) })),
+      totalBase: diff.totalBase, totalReal: diff.totalReal, totalAtual: diff.totalAtual,
+      totalRef: refReal ? diff.totalReal : diff.totalBase,
+      delta: refReal ? diff.deltaReal : diff.delta,
+      numAddons: refReal ? diff.numAddonsReal : diff.numAddons,
+    };
+  }, [diff, refReal]);
 
   const salvaRecolhidos = (next) => {
     try { localStorage.setItem(lsKeyRecolhidos(orc.id), JSON.stringify([...next])); } catch {}
     return next;
   };
+  const trocaRef = (k) => { setRef(k); try { localStorage.setItem(lsKeyRef(orc.id), k); } catch {} };
   const estaAberto = (chave) => editando || !recolhidos.has(chave);
   const toggleRecolhido = (chave) => {
     if (editando) return;
@@ -112,6 +159,11 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
     ...b,
     [campo]: b[campo].map(i => i.id === baseItemId ? { ...i, valor: valor === "" ? 0 : (Number(valor) || 0) } : i),
   }));
+  // Realizado vazio = "sem dado" (null), diferente de zero (= orçado e não gasto).
+  const setRealBase = (baseItemId, campo, valor) => patchBaseline(b => ({
+    ...b,
+    [campo]: b[campo].map(i => i.id === baseItemId ? { ...i, realizado: String(valor).trim() === "" ? null : (Number(valor) || 0) } : i),
+  }));
   const removeBase = (baseItemId, campo) => patchBaseline(b => ({
     ...b, [campo]: b[campo].filter(i => i.id !== baseItemId),
   }));
@@ -119,12 +171,13 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   const addLinha = () => {
     if (!novaLinha || !String(novaLinha.label || "").trim()) return;
     const id = `bl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const realizado = String(novaLinha.realizado ?? "").trim() === "" ? null : (Number(novaLinha.realizado) || 0);
     if (novaLinha.tipo === "fixo") {
-      patchBaseline(b => ({ ...b, fixos: [...b.fixos, { id, secao: novaLinha.secao, nome: novaLinha.label.trim(), valor: Number(novaLinha.valor) || 0 }] }));
+      patchBaseline(b => ({ ...b, fixos: [...b.fixos, { id, secao: novaLinha.secao, nome: novaLinha.label.trim(), valor: Number(novaLinha.valor) || 0, realizado }] }));
     } else {
       patchBaseline(b => ({ ...b, itens: [...b.itens, {
         id, grupo: novaLinha.grupo, label: novaLinha.label.trim(),
-        subKey: novaLinha.subKey || null, valor: Number(novaLinha.valor) || 0,
+        subKey: novaLinha.subKey || null, valor: Number(novaLinha.valor) || 0, realizado,
       }] }));
     }
     setNovaLinha(null);
@@ -139,9 +192,9 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
           <GitCompareArrows size={36} color={T.textSm}/>
           <p style={{margin:0,fontSize:15,fontWeight:700,color:T.text}}>Nenhuma base de comparação ainda</p>
           <p style={{margin:0,fontSize:12.5,color:T.textMd,maxWidth:480,lineHeight:1.6}}>
-            A base é o orçamento de referência da edição anterior (ex: {orc.meta.nome} {edicaoAnterior}).
-            Com ela, este comparativo mostra linha a linha o que mudou — e marca automaticamente
-            os <b>add-ons</b>, aumentos, reduções e remoções da edição atual.
+            A base é o orçamento de referência da edição anterior (ex: {orc.meta.nome} {edicaoAnterior}) —
+            o orçado aprovado e, quando houver, o realizado. Com ela, este comparativo mostra linha a linha
+            o que mudou e marca automaticamente os <b>add-ons</b>, aumentos, reduções e remoções da edição atual.
           </p>
           {!readOnly && (
             <Button T={T} variant="primary" size="md" icon={Plus}
@@ -154,20 +207,25 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
     );
   }
 
+  const tdNum = (extra = {}) => ({ padding:"10px 16px", textAlign:"right", whiteSpace:"nowrap", fontSize:12.5, fontFamily:FONT.num, ...extra });
+
   // Fixo pareado com linha de JOGO da base (baseSubKey) edita a base em `itens`, não em `fixos`.
-  const renderRow = (row, g, campoBaseGrupo) => { const campoBase = row.campoBase || campoBaseGrupo; return (
+  const renderRow = (row, g, campoBaseGrupo) => {
+    const campoBase = row.campoBase || campoBaseGrupo;
+    const editavel = editando && row.baseItemId;
+    return (
     <tr key={row.key} style={{borderTop:`1px solid ${T.border}`,opacity:row.status === "removido" ? 0.65 : 1}}>
       <td style={{padding:"10px 16px 10px 40px",whiteSpace:"nowrap",color:T.text,fontSize:12.5,fontWeight:500}}>
         {row.label}
         {row.labelBase && row.labelBase.trim().toLowerCase() !== String(row.label).trim().toLowerCase() && (
           <span style={{marginLeft:8,fontSize:10,color:T.textSm}}
-            title={row.baseItens?.length > 1 ? row.baseItens.map(i => `${i.label}: ${fmt(i.valor)}`).join("\n") : undefined}>
+            title={row.baseItens?.length > 1 ? row.baseItens.map(i => `${i.label}: ${fmt(i.valor)}${i.realizado != null ? ` · realizado ${fmt(i.realizado)}` : ""}`).join("\n") : undefined}>
             (base: {row.labelBase}{row.baseItens?.length > 1 ? ` · ${row.baseItens.length} linhas somadas` : ""})
           </span>
         )}
       </td>
-      <td className="num" style={{padding:"10px 16px",textAlign:"right",whiteSpace:"nowrap",color:T.textMd,fontSize:12.5,fontFamily:FONT.num}}>
-        {editando && row.baseItemId ? (
+      <td className="num" style={tdNum({color: refReal ? T.textSm : T.textMd})}>
+        {editavel ? (
           <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
             <input
               defaultValue={row.base || ""}
@@ -175,17 +233,38 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
               style={{...IS, width:110, textAlign:"right", padding:"4px 8px", fontSize:12}}
               inputMode="numeric"
             />
-            <button title="Remover linha da base" onClick={() => removeBase(row.baseItemId, campoBase)}
-              style={{border:"none",background:"none",cursor:"pointer",color:T.danger||"#DC2626",padding:2,display:"flex"}}>
-              <X size={13}/>
-            </button>
+            {!mostraReal && (
+              <button title="Remover linha da base" onClick={() => removeBase(row.baseItemId, campoBase)}
+                style={{border:"none",background:"none",cursor:"pointer",color:T.danger||"#DC2626",padding:2,display:"flex"}}>
+                <X size={13}/>
+              </button>
+            )}
           </span>
         ) : (row.base ? fmt(row.base) : "—")}
       </td>
-      <td className="num" style={{padding:"10px 16px",textAlign:"right",whiteSpace:"nowrap",color:T.text,fontSize:12.5,fontWeight:600,fontFamily:FONT.num}}>
+      {mostraReal && (
+        <td className="num" style={tdNum({color: refReal ? T.textMd : T.textSm, fontWeight: refReal ? 600 : 400})}>
+          {editavel ? (
+            <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
+              <input
+                defaultValue={row.real ?? ""}
+                placeholder="sem dado"
+                onBlur={e => setRealBase(row.baseItemId, campoBase, e.target.value)}
+                style={{...IS, width:110, textAlign:"right", padding:"4px 8px", fontSize:12}}
+                inputMode="numeric"
+              />
+              <button title="Remover linha da base" onClick={() => removeBase(row.baseItemId, campoBase)}
+                style={{border:"none",background:"none",cursor:"pointer",color:T.danger||"#DC2626",padding:2,display:"flex"}}>
+                <X size={13}/>
+              </button>
+            </span>
+          ) : fmtReal(row.real)}
+        </td>
+      )}
+      <td className="num" style={tdNum({color:T.text, fontWeight:600})}>
         {row.atual ? fmt(row.atual) : "—"}
       </td>
-      <td className="num" style={{padding:"10px 16px",textAlign:"right",whiteSpace:"nowrap",fontSize:12.5,color:deltaCor(row.delta, T),fontFamily:FONT.num}}>
+      <td className="num" style={tdNum({color:deltaCor(row.delta, T)})}>
         {fmtDelta(row.delta)}
       </td>
       <td style={{padding:"10px 16px",textAlign:"right"}}><Selo status={row.status} T={T}/></td>
@@ -213,6 +292,7 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
           </span>
         </td>
         <td className="num" style={{padding:"12px 16px",textAlign:"right",color:T.textMd,fontSize:12.5,fontWeight:600,fontFamily:FONT.num}}>{fmt(tot.totalBase)}</td>
+        {mostraReal && <td className="num" style={{padding:"12px 16px",textAlign:"right",color:T.textMd,fontSize:12.5,fontWeight:600,fontFamily:FONT.num}}>{fmt(tot.totalReal)}</td>}
         <td className="num" style={{padding:"12px 16px",textAlign:"right",color:T.text,fontSize:12.5,fontWeight:700,fontFamily:FONT.num}}>{fmt(tot.totalAtual)}</td>
         <td className="num" style={{padding:"12px 16px",textAlign:"right",fontSize:12.5,fontWeight:600,color:deltaCor(tot.delta, T),fontFamily:FONT.num}}>{fmtDelta(tot.delta)}</td>
         <td style={{padding:"12px 16px",textAlign:"right"}}>{extra || null}</td>
@@ -226,9 +306,9 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
     if (!editando) return null;
     if (!aberta) return (
       <tr key={`add_${tipo}_${grupoKey || secao}`}>
-        <td colSpan={5} style={{padding:"4px 16px 10px 40px"}}>
+        <td colSpan={nCols} style={{padding:"4px 16px 10px 40px"}}>
           <button
-            onClick={() => setNovaLinha(tipo === "fixo" ? { tipo:"fixo", secao, label:"", valor:"" } : { grupo:grupoKey, label:"", valor:"", subKey:"" })}
+            onClick={() => setNovaLinha(tipo === "fixo" ? { tipo:"fixo", secao, label:"", valor:"", realizado:"" } : { grupo:grupoKey, label:"", valor:"", realizado:"", subKey:"" })}
             style={{border:`1px dashed ${T.border}`,background:"none",cursor:"pointer",color:T.textMd,fontSize:11,padding:"4px 10px",borderRadius:6,display:"inline-flex",alignItems:"center",gap:6}}>
             <Plus size={12}/> linha da base
           </button>
@@ -236,16 +316,20 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
       </tr>
     );
     const grupo = GRUPOS_COMPARATIVO.find(g => g.key === grupoKey);
+    const soNum = v => v.replace(/[^0-9.,]/g, "");
     return (
       <tr key={`add_${tipo}_${grupoKey || secao}`} style={{background:T.surfaceAlt||T.bg}}>
-        <td colSpan={5} style={{padding:"8px 16px 12px 40px"}}>
+        <td colSpan={nCols} style={{padding:"8px 16px 12px 40px"}}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <input autoFocus placeholder="Nome do serviço na base" value={novaLinha.label}
               onChange={e => setNovaLinha(n => ({ ...n, label: e.target.value }))}
               style={{...IS, width:240, padding:"5px 10px", fontSize:12}}/>
-            <input placeholder="Valor 2026" value={novaLinha.valor} inputMode="numeric"
-              onChange={e => setNovaLinha(n => ({ ...n, valor: e.target.value.replace(/[^0-9.,]/g, "") }))}
-              style={{...IS, width:120, padding:"5px 10px", fontSize:12, textAlign:"right"}}/>
+            <input placeholder={`Orçado ${bl.label}`} value={novaLinha.valor} inputMode="numeric"
+              onChange={e => setNovaLinha(n => ({ ...n, valor: soNum(e.target.value) }))}
+              style={{...IS, width:130, padding:"5px 10px", fontSize:12, textAlign:"right"}}/>
+            <input placeholder={`Realizado ${bl.label}`} value={novaLinha.realizado} inputMode="numeric"
+              onChange={e => setNovaLinha(n => ({ ...n, realizado: soNum(e.target.value) }))}
+              style={{...IS, width:130, padding:"5px 10px", fontSize:12, textAlign:"right"}}/>
             {tipo !== "fixo" && (
               <select value={novaLinha.subKey} onChange={e => setNovaLinha(n => ({ ...n, subKey: e.target.value }))}
                 style={{...IS, width:190, padding:"5px 10px", fontSize:12}}>
@@ -263,8 +347,8 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
 
   // Chaves de topo (grupos com linhas + bloco de fixos) — base do recolher tudo.
   const chavesTopo = [
-    ...diff.grupos.filter(g => g.rows.length > 0).map(g => g.key),
-    ...(diff.fixos.length > 0 ? ["fixos"] : []),
+    ...V.grupos.filter(g => g.rows.length > 0).map(g => g.key),
+    ...(V.fixos.length > 0 ? ["fixos"] : []),
   ];
   const tudoRecolhido = chavesTopo.length > 0 && chavesTopo.every(k => recolhidos.has(k));
 
@@ -274,18 +358,19 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
     variaveis: {
       key:"variaveis", label:"Custos Variáveis", sub:`por jogo · ${(orc.jogos || []).length} jogos na edição atual`,
       color: T.info || "#2563EB",
-      totalBase: soma(diff.grupos, "totalBase"), totalAtual: soma(diff.grupos, "totalAtual"),
-      rows: diff.grupos.flatMap(g => g.rows),
+      totalBase: soma(V.grupos, "totalBase"), totalReal: soma(V.grupos, "totalReal"), totalAtual: soma(V.grupos, "totalAtual"),
+      rows: V.grupos.flatMap(g => g.rows),
     },
     fixos: {
       key:"fixos", label:"Custos Fixos", sub:"por edição · pessoal fixo, serviços e reembolsos",
       color: "#a855f7",
-      totalBase: soma(diff.fixos, "totalBase"), totalAtual: soma(diff.fixos, "totalAtual"),
-      rows: diff.fixos.flatMap(f => f.rows),
+      totalBase: soma(V.fixos, "totalBase"), totalReal: soma(V.fixos, "totalReal"), totalAtual: soma(V.fixos, "totalAtual"),
+      rows: V.fixos.flatMap(f => f.rows),
     },
   };
-  Object.values(blocos).forEach(b => { b.delta = b.totalAtual - b.totalBase; });
+  Object.values(blocos).forEach(b => { b.totalRef = refReal ? b.totalReal : b.totalBase; b.delta = b.totalAtual - b.totalRef; });
   const pct = (parte, total) => total > 0 ? `${Math.round((parte / total) * 100)}%` : "—";
+  const pctDelta = (delta, refTotal) => refTotal ? `${delta >= 0 ? "+" : ""}${((delta / refTotal) * 100).toFixed(1)}%` : "—";
 
   // Faixa divisória de bloco: título, totais e (opcional) recolher o bloco inteiro.
   const renderBloco = (b, { chave, icon: Icon } = {}) => {
@@ -312,14 +397,19 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
           </span>
         </td>
         <td className="num" style={{padding:"13px 16px",textAlign:"right",color:T.textMd,fontSize:13,fontWeight:600,fontFamily:FONT.num,whiteSpace:"nowrap"}}>
-          {fmt(b.totalBase)}<div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pct(b.totalBase, diff.totalBase)} do total</div>
+          {fmt(b.totalBase)}<div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pct(b.totalBase, V.totalBase)} do total</div>
         </td>
+        {mostraReal && (
+          <td className="num" style={{padding:"13px 16px",textAlign:"right",color:T.textMd,fontSize:13,fontWeight:600,fontFamily:FONT.num,whiteSpace:"nowrap"}}>
+            {fmt(b.totalReal)}<div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pct(b.totalReal, V.totalReal)} do total</div>
+          </td>
+        )}
         <td className="num" style={{padding:"13px 16px",textAlign:"right",color:T.text,fontSize:13,fontWeight:700,fontFamily:FONT.num,whiteSpace:"nowrap"}}>
-          {fmt(b.totalAtual)}<div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pct(b.totalAtual, diff.totalAtual)} do total</div>
+          {fmt(b.totalAtual)}<div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pct(b.totalAtual, V.totalAtual)} do total</div>
         </td>
         <td className="num" style={{padding:"13px 16px",textAlign:"right",fontSize:13,fontWeight:700,color:deltaCor(b.delta, T),fontFamily:FONT.num,whiteSpace:"nowrap"}}>
           {fmtDelta(b.delta)}
-          <div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{b.totalBase ? `${b.delta >= 0 ? "+" : ""}${((b.delta / b.totalBase) * 100).toFixed(1)}%` : "—"}</div>
+          <div style={{fontSize:10,fontWeight:500,color:T.textSm}}>{pctDelta(b.delta, b.totalRef)}</div>
         </td>
         <td/>
       </tr>
@@ -333,34 +423,44 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
         Subtotal {b.label.replace("Custos ", "")}
       </td>
       <td className="num" style={{padding:"10px 16px",textAlign:"right",color:T.textMd,fontSize:12.5,fontWeight:600,fontFamily:FONT.num,whiteSpace:"nowrap"}}>{fmt(b.totalBase)}</td>
+      {mostraReal && <td className="num" style={{padding:"10px 16px",textAlign:"right",color:T.textMd,fontSize:12.5,fontWeight:600,fontFamily:FONT.num,whiteSpace:"nowrap"}}>{fmt(b.totalReal)}</td>}
       <td className="num" style={{padding:"10px 16px",textAlign:"right",color:T.text,fontSize:12.5,fontWeight:700,fontFamily:FONT.num,whiteSpace:"nowrap"}}>{fmt(b.totalAtual)}</td>
       <td className="num" style={{padding:"10px 16px",textAlign:"right",fontSize:12.5,fontWeight:700,color:deltaCor(b.delta, T),fontFamily:FONT.num,whiteSpace:"nowrap"}}>{fmtDelta(b.delta)}</td>
       <td style={{padding:"10px 16px",textAlign:"right"}}><Selo status={statusBloco(b)} T={T}/></td>
     </tr>
   );
 
+  const atualLabel = `${orc.meta.nome} ${orc.meta.edicao}`;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:18}}>
       {/* ── KPIs ── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:12}}>
-        <Stat T={T} label={`Base · ${bl.label}`} value={fmtK(diff.totalBase)} sub={fmt(diff.totalBase)} color={T.textMd||"#6b7280"} icon={Wallet}/>
-        <Stat T={T} label={`Atual · ${orc.meta.nome} ${orc.meta.edicao}`} value={fmtK(diff.totalAtual)} sub={fmt(diff.totalAtual)} color={T.info||"#2563EB"} icon={Wallet}/>
-        <Stat T={T} label="Variação" value={fmtDelta(diff.delta)}
-          sub={diff.totalBase ? `${diff.delta >= 0 ? "+" : ""}${((diff.delta / diff.totalBase) * 100).toFixed(1)}% vs base` : "—"}
-          color={deltaCor(diff.delta, T)} icon={diff.delta >= 0 ? TrendingUp : TrendingDown}/>
-        <Stat T={T} label="Add-ons" value={String(diff.numAddons)} sub="Serviços novos nesta edição" color="#8b5cf6" icon={Sparkles}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12}}>
+        <Stat T={T} label={`Orçado · ${bl.label}`} value={fmtK(V.totalBase)} sub={fmt(V.totalBase)} color={T.textMd||"#6b7280"} icon={Wallet}/>
+        {temReal && (
+          <Stat T={T} label={`Realizado · ${bl.label}`} value={fmtK(V.totalReal)}
+            sub={`${fmt(V.totalReal)} · ${pctDelta(V.totalReal - V.totalBase, V.totalBase)} vs orçado`}
+            color="#D97706" icon={Receipt}/>
+        )}
+        <Stat T={T} label={`Orçado · ${atualLabel}`} value={fmtK(V.totalAtual)} sub={fmt(V.totalAtual)} color={T.info||"#2563EB"} icon={Wallet}/>
+        <Stat T={T} label={`Variação vs ${refLabel}`} value={fmtDelta(V.delta)}
+          sub={V.totalRef ? `${pctDelta(V.delta, V.totalRef)} sobre ${fmtK(V.totalRef)}` : "—"}
+          color={deltaCor(V.delta, T)} icon={V.delta >= 0 ? TrendingUp : TrendingDown}/>
+        <Stat T={T} label="Add-ons" value={String(V.numAddons)} sub={refReal ? "Sem gasto nem orçado na base" : "Serviços novos nesta edição"} color="#8b5cf6" icon={Sparkles}/>
       </div>
 
       {/* ── Tabela comparativa ── */}
       <Card T={T}>
         <SectionHeader
           T={T}
-          title={`Comparativo · ${bl.label} × ${orc.meta.nome} ${orc.meta.edicao}`}
-          subtitle="Linha a linha por serviço — selo automático: add-on, aumento, redução ou removido"
+          title={`Comparativo · ${bl.label} × ${atualLabel}`}
+          subtitle={temReal
+            ? `Linha a linha por serviço — delta e selo tomam o ${refLabel} como referência`
+            : "Linha a linha por serviço — selo automático: add-on, aumento, redução ou removido"}
           icon={GitCompareArrows}
           right={
-            <span style={{display:"inline-flex",gap:8,alignItems:"center"}}>
+            <span style={{display:"inline-flex",gap:8,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
+              {temReal && <RefToggle valor={ref} onChange={trocaRef} blLabel={bl.label} T={T}/>}
               {!editando && (
                 <Button T={T} variant="secondary" size="sm" icon={tudoRecolhido ? ChevronsUpDown : ChevronsDownUp}
                   onClick={() => setRecolhidos(() => salvaRecolhidos(tudoRecolhido ? new Set() : new Set(chavesTopo)))}>
@@ -377,20 +477,21 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
           }
         />
         <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:720}}>
+          <table style={{width:"100%",borderCollapse:"collapse",minWidth:mostraReal ? 860 : 720}}>
             <thead>
               <tr style={{background:T.surfaceAlt||T.bg}}>
                 <th style={thStyle(T, true)}>Serviço</th>
-                <th style={thStyle(T)}>{bl.label}</th>
-                <th style={thStyle(T)}>{orc.meta.nome} {orc.meta.edicao}</th>
-                <th style={thStyle(T)}>Δ</th>
+                <th style={thStyle(T, false, !refReal)}>Orçado {bl.label}</th>
+                {mostraReal && <th style={thStyle(T, false, refReal)}>Realizado {bl.label}</th>}
+                <th style={thStyle(T, false, true)}>Orçado {atualLabel}</th>
+                <th style={thStyle(T)}>Δ vs {refReal ? "realizado" : "orçado"}</th>
                 <th style={thStyle(T)}>Selo</th>
               </tr>
             </thead>
             <tbody>
               {/* ══ BLOCO 1 · CUSTOS VARIÁVEIS (por jogo) ══ */}
               {renderBloco(blocos.variaveis, { chave:"variaveis", icon:Layers })}
-              {estaAberto("variaveis") && diff.grupos.map(g => (g.rows.length > 0 || editando) ? [
+              {estaAberto("variaveis") && V.grupos.map(g => (g.rows.length > 0 || editando) ? [
                 renderHeaderGrupo(g.label, g.color, g, { chave:g.key, rows:g.rows }),
                 ...(estaAberto(g.key) ? [
                   ...g.rows.map(row => renderRow(row, g, "itens")),
@@ -400,8 +501,8 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
               {renderSubtotal(blocos.variaveis)}
 
               {/* ══ BLOCO 2 · CUSTOS FIXOS (por edição) ══ */}
-              {(diff.fixos.length > 0 || editando) && renderBloco(blocos.fixos, { chave:"fixos", icon:Briefcase })}
-              {estaAberto("fixos") && diff.fixos.map(sec => {
+              {(V.fixos.length > 0 || editando) && renderBloco(blocos.fixos, { chave:"fixos", icon:Briefcase })}
+              {estaAberto("fixos") && V.fixos.map(sec => {
                 const chaveSec = `sec:${sec.secao}`;
                 const secAberta = estaAberto(chaveSec);
                 const SecChevron = secAberta ? ChevronDown : ChevronRight;
@@ -418,6 +519,7 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
                       </span>
                     </td>
                     <td className="num" style={{padding:"8px 16px",textAlign:"right",fontSize:11,color:T.textSm,fontFamily:FONT.num}}>{fmt(sec.totalBase)}</td>
+                    {mostraReal && <td className="num" style={{padding:"8px 16px",textAlign:"right",fontSize:11,color:T.textSm,fontFamily:FONT.num}}>{fmt(sec.totalReal)}</td>}
                     <td className="num" style={{padding:"8px 16px",textAlign:"right",fontSize:11,color:T.textSm,fontFamily:FONT.num,fontWeight:600}}>{fmt(sec.totalAtual)}</td>
                     <td className="num" style={{padding:"8px 16px",textAlign:"right",fontSize:11,color:deltaCor(sec.delta, T),fontFamily:FONT.num}}>{fmtDelta(sec.delta)}</td>
                     <td/>
@@ -428,22 +530,24 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
                   ] : []),
                 ];
               })}
-              {editando && diff.fixos.length === 0 && renderAddLinha("fixo", null, "Serviços")}
-              {(diff.fixos.length > 0 || editando) && renderSubtotal(blocos.fixos)}
+              {editando && V.fixos.length === 0 && renderAddLinha("fixo", null, "Serviços")}
+              {(V.fixos.length > 0 || editando) && renderSubtotal(blocos.fixos)}
 
               <tr style={{borderTop:`3px solid ${T.borderStrong||T.border}`,background:T.surfaceAlt||T.bg,fontWeight:700}}>
                 <td style={{padding:"14px 16px",color:T.text,fontSize:12,letterSpacing:"0.04em",textTransform:"uppercase"}}>Total Geral</td>
-                <td className="num" style={{padding:"14px 16px",textAlign:"right",color:T.textMd,whiteSpace:"nowrap",fontSize:14,fontWeight:600,fontFamily:FONT.num}}>{fmt(diff.totalBase)}</td>
-                <td className="num" style={{padding:"14px 16px",textAlign:"right",color:T.info||"#2563EB",whiteSpace:"nowrap",fontSize:14,fontWeight:700,fontFamily:FONT.num}}>{fmt(diff.totalAtual)}</td>
-                <td className="num" style={{padding:"14px 16px",textAlign:"right",whiteSpace:"nowrap",fontSize:14,fontWeight:700,color:deltaCor(diff.delta, T),fontFamily:FONT.num}}>{fmtDelta(diff.delta)}</td>
+                <td className="num" style={{padding:"14px 16px",textAlign:"right",color:T.textMd,whiteSpace:"nowrap",fontSize:14,fontWeight:600,fontFamily:FONT.num}}>{fmt(V.totalBase)}</td>
+                {mostraReal && <td className="num" style={{padding:"14px 16px",textAlign:"right",color:"#D97706",whiteSpace:"nowrap",fontSize:14,fontWeight:600,fontFamily:FONT.num}}>{fmt(V.totalReal)}</td>}
+                <td className="num" style={{padding:"14px 16px",textAlign:"right",color:T.info||"#2563EB",whiteSpace:"nowrap",fontSize:14,fontWeight:700,fontFamily:FONT.num}}>{fmt(V.totalAtual)}</td>
+                <td className="num" style={{padding:"14px 16px",textAlign:"right",whiteSpace:"nowrap",fontSize:14,fontWeight:700,color:deltaCor(V.delta, T),fontFamily:FONT.num}}>{fmtDelta(V.delta)}</td>
                 <td/>
               </tr>
             </tbody>
           </table>
         </div>
         <p style={{margin:0,padding:"10px 16px 14px",fontSize:11,color:T.textSm,lineHeight:1.5}}>
-          Base importada em {new Date(bl.importadoEm).toLocaleDateString("pt-BR")} — os valores da base são congelados e
-          editáveis aqui; o lado atual é sempre o orçamento vivo (jogos × premissas + serviços fixos).
+          Base importada em {new Date(bl.importadoEm).toLocaleDateString("pt-BR")} — orçado e realizado da base são
+          congelados e editáveis aqui (realizado em branco = sem dado); o lado atual é sempre o orçamento vivo
+          (jogos × premissas + serviços fixos).
         </p>
       </Card>
     </div>

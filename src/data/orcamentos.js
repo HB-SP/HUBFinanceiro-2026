@@ -272,10 +272,13 @@ export const calcTotais = (orc) => {
 // Comparativo edição × edição: o orçamento guarda uma base congelada (ex: o
 // aprovado de 2026) e o Comparativo mostra o delta linha a linha, com selo
 // automático — add-on (não existia na base), aumento, redução ou removido.
-//   orc.baseline = { label, importadoEm, itens:[{id, grupo, label, subKey|null, valor}],
-//                    fixos:[{id, secao, nome, valor}] }
+//   orc.baseline = { label, importadoEm, itens:[{id, grupo, label, subKey|null, valor, realizado?}],
+//                    fixos:[{id, secao, nome, valor, realizado?}] }
 // Item com subKey casa com a linha do serviço; sem subKey é linha só-da-base
 // (aparece como "removido" enquanto a edição atual não tiver o equivalente).
+// `valor` é o ORÇADO da edição anterior (aprovado); `realizado` (opcional) é o
+// que de fato foi gasto nela — a peça que justifica o orçamento novo junto à
+// entidade é "realizado anterior × orçado atual", não "orçado × orçado".
 
 // ─── MACRO GRUPOS DO RESUMO ──────────────────────────────────────────────────
 // Leitura macro da entidade pagadora (mesmos blocos da planilha de orçamento):
@@ -323,6 +326,40 @@ export const statusComparativo = (base, atual) =>
   : atual < base ? "reducao"
   : "igual";
 
+// Selo tomando o REALIZADO da base como referência. Linha que existia no
+// orçamento anterior mas não gastou nada (ex.: Coletivas 2026) não é add-on —
+// é "não realizado"; sem dado de realizado na linha, cai no selo por orçado.
+export const statusVsRealizado = (base, real, atual) => {
+  if (real == null) return statusComparativo(base, atual);
+  if (atual > 0 && real === 0) return base > 0 ? "nao_realizado" : "addon";
+  if (real > 0 && atual === 0) return "removido";
+  return atual > real ? "aumento" : atual < real ? "reducao" : "igual";
+};
+
+const temNum = v => v != null && v !== "" && !Number.isNaN(Number(v));
+// Realizado somado de um conjunto de linhas da base; null se nenhuma tem o dado.
+const somaRealizado = (itens) => {
+  const com = itens.filter(i => temNum(i.realizado));
+  return com.length ? com.reduce((s, i) => s + (Number(i.realizado) || 0), 0) : null;
+};
+export const baselineTemRealizado = (bl) =>
+  !!bl && [...(bl.itens || []), ...(bl.fixos || [])].some(i => temNum(i.realizado));
+// Completa a linha com os campos "vs realizado" (deltaReal/statusReal) a partir
+// de base/real/atual já resolvidos.
+const fechaRow = (r) => {
+  r.status = statusComparativo(r.base, r.atual);
+  r.delta = r.atual - r.base;
+  r.statusReal = statusVsRealizado(r.base, r.real, r.atual);
+  r.deltaReal = r.atual - (r.real ?? 0);
+  return r;
+};
+const totaisRows = (rows) => {
+  const totalBase  = rows.reduce((s, r) => s + r.base, 0);
+  const totalReal  = rows.reduce((s, r) => s + (r.real ?? 0), 0);
+  const totalAtual = rows.reduce((s, r) => s + r.atual, 0);
+  return { totalBase, totalReal, totalAtual, delta: totalAtual - totalBase, deltaReal: totalAtual - totalReal };
+};
+
 const normNome = s => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 // Junta base × orçamento atual: grupos variáveis por subKey (linha da base sem
@@ -360,22 +397,21 @@ export const diffBaseline = (orc) => {
       bis.forEach(i => usados.add(i.id));
       const bi = bis[0] || null;
       const base = bis.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+      const real = somaRealizado(bis);
       if (atual === 0 && base === 0 && !bi) return;
       rows.push({
-        key: sub.key, label: sub.label, base, atual,
+        key: sub.key, label: sub.label, base, real, atual,
         labelBase: bis.length ? bis.map(i => i.label).join(" + ") : null,
         baseItemId: bis.length === 1 ? bi.id : null,   // com soma, a base não edita inline
-        baseItens: bis.map(i => ({ id: i.id, label: i.label, valor: Number(i.valor) || 0 })),
+        baseItens: bis.map(i => ({ id: i.id, label: i.label, valor: Number(i.valor) || 0, realizado: temNum(i.realizado) ? Number(i.realizado) : null })),
       });
     });
     blItens.filter(i => !usados.has(i.id)).forEach(i => {
-      rows.push({ key: `bl_${i.id}`, label: i.label, labelBase: i.label, base: Number(i.valor) || 0, atual: 0, baseItemId: i.id, soBase: true });
+      rows.push({ key: `bl_${i.id}`, label: i.label, labelBase: i.label, base: Number(i.valor) || 0, real: somaRealizado([i]), atual: 0, baseItemId: i.id, soBase: true });
     });
-    rows.forEach(r => { r.status = statusComparativo(r.base, r.atual); r.delta = r.atual - r.base; });
-    rows.sort((a, b) => Math.max(b.base, b.atual) - Math.max(a.base, a.atual));
-    const totalBase  = rows.reduce((s, r) => s + r.base, 0);
-    const totalAtual = rows.reduce((s, r) => s + r.atual, 0);
-    return { ...g, rows, totalBase, totalAtual, delta: totalAtual - totalBase };
+    rows.forEach(fechaRow);
+    rows.sort((a, b) => Math.max(b.base, b.real ?? 0, b.atual) - Math.max(a.base, a.real ?? 0, a.atual));
+    return { ...g, rows, ...totaisRows(rows) };
   });
 
   // Fixos: seções = união (base ∪ atual); linhas casam por nome normalizado.
@@ -397,26 +433,24 @@ export const diffBaseline = (orc) => {
       const base = refBase ? (Number(refBase.valor) || 0) : 0;
       if (atual === 0 && !refBase) return;
       rows.push({
-        key: `fx_${it.id}`, label: it.nome, base, atual,
+        key: `fx_${it.id}`, label: it.nome, base, real: refBase ? somaRealizado([refBase]) : null, atual,
         labelBase: refBase ? (puxado ? puxado.label : refBase.nome) : null,
         baseItemId: refBase?.id || null,
         campoBase: puxado ? "itens" : "fixos",
       });
     });
     itensBase.filter(f => !usados.has(f.id)).forEach(f => {
-      rows.push({ key: `blfx_${f.id}`, label: f.nome, base: Number(f.valor) || 0, atual: 0, baseItemId: f.id, soBase: true });
+      rows.push({ key: `blfx_${f.id}`, label: f.nome, base: Number(f.valor) || 0, real: somaRealizado([f]), atual: 0, baseItemId: f.id, soBase: true });
     });
-    rows.forEach(r => { r.status = statusComparativo(r.base, r.atual); r.delta = r.atual - r.base; });
-    const totalBase  = rows.reduce((s, r) => s + r.base, 0);
-    const totalAtual = rows.reduce((s, r) => s + r.atual, 0);
-    return { secao, rows, totalBase, totalAtual, delta: totalAtual - totalBase };
+    rows.forEach(fechaRow);
+    return { secao, rows, ...totaisRows(rows) };
   }).filter(sec => sec.rows.length > 0);
 
-  const totalBase  = grupos.reduce((s, g) => s + g.totalBase, 0)  + fixos.reduce((s, f) => s + f.totalBase, 0);
-  const totalAtual = grupos.reduce((s, g) => s + g.totalAtual, 0) + fixos.reduce((s, f) => s + f.totalAtual, 0);
   const todasRows = [...grupos.flatMap(g => g.rows), ...fixos.flatMap(f => f.rows)];
+  const tot = totaisRows(todasRows);
   const numAddons = todasRows.filter(r => r.status === "addon").length;
-  return { grupos, fixos, totalBase, totalAtual, delta: totalAtual - totalBase, numAddons };
+  const numAddonsReal = todasRows.filter(r => r.statusReal === "addon").length;
+  return { grupos, fixos, ...tot, numAddons, numAddonsReal, temRealizado: baselineTemRealizado(bl) };
 };
 
 // Espelho leve para o orc_registry (recalculado a cada save do documento).
