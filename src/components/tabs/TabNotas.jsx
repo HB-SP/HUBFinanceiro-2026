@@ -935,6 +935,7 @@ function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos,
                   : <span style={{color:T.textSm,fontSize:12,marginLeft:12}}>{sub.jogoLabel} · Rd {sub.rodada}</span>}
                 {sub.numeroNF && <span style={{color:T.textSm,fontSize:11,marginLeft:8}}>NF {sub.numeroNF}</span>}
                 {possivelDuplicata && <span style={{marginLeft:8}}><Pill label="Possível duplicata" color="#f59e0b"/></span>}
+                {sub.leituraPDF?.confirmouDivergencia && <span style={{marginLeft:8}}><Pill label={`Fornecedor enviou apesar do aviso: ${(sub.leituraPDF.divergencias || []).join(", ")}`} color="#f59e0b"/></span>}
               </div>
               <span style={{color:"#8b5cf6",fontWeight:700,fontSize:16}}>{fmt(valorAtual)}</span>
             </div>

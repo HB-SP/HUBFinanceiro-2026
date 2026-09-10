@@ -276,6 +276,40 @@ export function resumoLeitura(dados, checks) {
   return { tom: "verde", texto: `PDF confere (${bons.map(c => c.campo).join(", ")})` };
 }
 
+// ── Formulário público ──────────────────────────────────────────────────────
+// Lê o File escolhido no input → { dados }. Imagem/escaneado → layout "sem texto".
+export async function lerArquivoNF(file) {
+  const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("não foi possível ler o arquivo")); r.readAsDataURL(file); });
+  const { texto, mime } = await extrairTextoPDF(dataUrl);
+  if (mime !== "application/pdf") return { dados: { layout: "sem texto", cnpjs: [] } };
+  return { dados: extrairDadosNF(texto) };
+}
+
+// Frase curta para o fornecedor: "NF 92 · emitida em 13/05/2026 · total R$ 1.000,00"
+export function resumoLeituraCurto(d) {
+  if (!d || d.layout === "sem texto") return null;
+  return [d.numero ? `NF ${d.numero}` : null, d.emissao ? `emitida em ${d.emissao}` : null, d.valor != null ? `total R$ ${fmtBR(d.valor)}` : null].filter(Boolean).join(" · ") || null;
+}
+
+// Divergências entre o PDF lido e o que o fornecedor digitou — só AVISA, quem
+// decide é o fornecedor (regra do financeiro, 10/09/2026). Leituras por
+// aproximação (sem rótulo explícito) não geram aviso, para não travar quem tem
+// nota de layout raro. Devolve [{ campo, texto }].
+export function divergenciasEnvio(dados, { numeroNF, chaveAcesso, dataEmissao, total, fornecedor, cnpj }) {
+  if (!dados || dados.layout === "sem texto") return [];
+  const checks = compararLeitura(dados, { numeroNF, chaveAcesso, dataEmissao, valorNF: total, fornecedor }, cnpj ? { cnpj } : null);
+  const msgs = [];
+  for (const c of checks) {
+    if (c.ok !== false || c.fraco) continue;
+    if (c.campo === "Nº") msgs.push({ campo: "Nº", texto: `Número: o PDF diz NF ${c.pdf}, você digitou ${c.hub}.` });
+    if (c.campo === "Chave") msgs.push({ campo: "Chave", texto: "A chave de acesso digitada não é a do PDF anexado." });
+    if (c.campo === "Emissão") msgs.push({ campo: "Emissão", texto: `Data de emissão: o PDF diz ${c.pdf}, você informou ${c.hub}.` });
+    if (c.campo === "Valor") msgs.push({ campo: "Valor", texto: `Valor: o PDF totaliza R$ ${c.pdf}, mas os serviços informados somam R$ ${c.hub}.` });
+    if (c.campo === "Emissor") msgs.push({ campo: "Emissor", texto: "O CNPJ do fornecedor selecionado não aparece no PDF. Confira se anexou a nota certa." });
+  }
+  return msgs;
+}
+
 // Cache por id + fila com 2 leituras simultâneas: a aba Recebidas dispara uma
 // leitura por cartão ao montar, e sem isso 20 PDFs desceriam de uma vez.
 const cache = new Map();

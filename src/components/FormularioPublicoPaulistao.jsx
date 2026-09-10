@@ -1,4 +1,10 @@
 import { patchNumeroNF, avisoChaveDetectada } from "../lib/nfNumero";
+import LeituraNFForm from "./LeituraNFForm";
+import { divergenciasEnvio } from "../lib/leitorNF";
+// Leitura do PDF × digitado: só avisa e deixa o fornecedor confirmar (decisão do financeiro, 10/09/2026).
+const MSG_DIVERGENCIA = (divs) => `⚠️ O PDF anexado não bate com o que foi digitado:\n\n${divs.map(d => "• " + d.texto).join("\n")}\n\nQuer enviar assim mesmo?\n(Cancelar volta para você corrigir)`;
+const cnpjDoFornecedor = (nome, lista) => (lista || []).find(f => String(f.apelido || "").trim().toLowerCase() === String(nome || "").trim().toLowerCase())?.cnpj || null;
+
 import { useState, useRef, useEffect } from "react";
 import { Sun, Moon } from "lucide-react";
 import { DateInput } from "./ui";
@@ -111,7 +117,7 @@ const validarArquivoNF = (f) => {
   return null;
 };
 
-function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T }) {
+function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedores, resumo, T, setLeitura }) {
   const [erroArquivo, setErroArquivo] = useState(null);
   const escolherArquivo = (f) => {
     const erro = validarArquivoNF(f);
@@ -162,6 +168,7 @@ function NFDataStep({ nfData, setNfData, arquivo, setArquivo, fileRef, fornecedo
         </div>
         {erroArquivo && <p style={{margin:"6px 0 0",color:"#ef4444",fontSize:12,fontWeight:600}}>{erroArquivo}</p>}
       </div>
+      <LeituraNFForm arquivo={arquivo} setNfData={setNfData} onLeitura={setLeitura} T={T}/>
       {resumo}
     </div>
   );
@@ -177,6 +184,7 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
   const [servicosSel, setServicosSel] = useState({});
   const [valores, setValores] = useState({});
   const [nfData, setNfData] = useState({ fornecedor:"", numeroNF:"", dataEmissao:"", dataEnvio:"", obs:"" });
+  const [leitura, setLeitura] = useState(null); // dados lidos do PDF anexado (LeituraNFForm)
   const [arquivo, setArquivo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef(null);
@@ -236,6 +244,10 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
       const fileHash = dataUrlNF ? await hashDataUrl(dataUrlNF) : null;
       const dup = await nfDuplicadaServidor('paulistao', { ...nfData, fileHash });
       if (dup?.dup) { alert(MSG_DUPLICADA(nfData.numeroNF)); setSubmitting(false); return; }
+      // Leitura do PDF × dados digitados: só AVISA; o fornecedor decide (10/09/2026).
+      const divergencias = divergenciasEnvio(leitura, { ...nfData, total: totalGeral, cnpj: cnpjDoFornecedor(nfData.fornecedor, fornecedores) });
+      if (divergencias.length && !window.confirm(MSG_DIVERGENCIA(divergencias))) { setSubmitting(false); return; }
+      const leituraPDF = leitura ? { numero: leitura.numero ?? null, emissao: leitura.emissao ?? null, valor: leitura.valor ?? null, chave: leitura.chave ?? null, layout: leitura.layout, divergencias: divergencias.map(d => d.campo), confirmouDivergencia: divergencias.length > 0 } : null;
 
       if (dataUrlNF) {
         await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
@@ -260,7 +272,7 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
       const valorNF = Object.values(servicosDetalhe).reduce((s, v) => s + (v || 0), 0);
       const firstJogo = jogosResumo[0];
       const submission = {
-        id: submissionId, clientRef, tipo:"jogo", ...nfData, ...(fileHash ? { fileHash } : {}), valorNF, valorFiscalTotal: valorNF,
+        id: submissionId, clientRef, tipo:"jogo", ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}), valorNF, valorFiscalTotal: valorNF,
         fase: firstJogo?.fase, rodada: firstJogo?.rodada, jogoId: firstJogo?.id,
         jogoIds: jogosResumo.map(j => j.id),
         jogoLabel: jogosResumo.map(j => `${j.mandante} x ${j.visitante}`).join(" + "),
@@ -425,7 +437,7 @@ function FormJogo({ divulgados, fornecedores, onDone, T }) {
         )}
 
         {step === 4 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
@@ -471,6 +483,7 @@ function FormMensal({ fornecedores, onDone, T }) {
   const [servicoSel, setServicoSel] = useState(null);
   const [valor, setValorState] = useState("");
   const [nfData, setNfData] = useState({ fornecedor:"", numeroNF:"", dataEmissao:"", dataEnvio:"", obs:"" });
+  const [leitura, setLeitura] = useState(null); // dados lidos do PDF anexado (LeituraNFForm)
   const [arquivo, setArquivo] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef(null);
@@ -495,6 +508,10 @@ function FormMensal({ fornecedores, onDone, T }) {
       const fileHash = dataUrlNF ? await hashDataUrl(dataUrlNF) : null;
       const dup = await nfDuplicadaServidor('paulistao', { ...nfData, fileHash });
       if (dup?.dup) { alert(MSG_DUPLICADA(nfData.numeroNF)); setSubmitting(false); return; }
+      // Leitura do PDF × dados digitados: só AVISA; o fornecedor decide (10/09/2026).
+      const divergencias = divergenciasEnvio(leitura, { ...nfData, total: parseValorBR(valor), cnpj: cnpjDoFornecedor(nfData.fornecedor, fornecedores) });
+      if (divergencias.length && !window.confirm(MSG_DIVERGENCIA(divergencias))) { setSubmitting(false); return; }
+      const leituraPDF = leitura ? { numero: leitura.numero ?? null, emissao: leitura.emissao ?? null, valor: leitura.valor ?? null, chave: leitura.chave ?? null, layout: leitura.layout, divergencias: divergencias.map(d => d.campo), confirmouDivergencia: divergencias.length > 0 } : null;
 
       const submissionId = Date.now();
       let hasFile = false;
@@ -502,7 +519,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         await saveNFFilePublico(submissionId, dataUrlNF); hasFile = true; // falha aborta o envio (catch externo avisa)
       }
       const submission = {
-        id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}),
+        id: submissionId, clientRef, tipo:"mensal", ...nfData, ...(fileHash ? { fileHash } : {}), ...(leituraPDF ? { leituraPDF } : {}),
         valorNF: parseValorBR(valor),
         mes: mesSel, mesLabel: MESES[mesSel],
         servicoId: servicoSel.id,
@@ -596,7 +613,7 @@ function FormMensal({ fornecedores, onDone, T }) {
         )}
 
         {step === 3 && (
-          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T}
+          <NFDataStep nfData={nfData} setNfData={setNfData} arquivo={arquivo} setArquivo={setArquivo} fileRef={fileRef} fornecedores={fornecedores} T={T} setLeitura={setLeitura}
             resumo={
               <div style={{background:T.bg,borderRadius:10,padding:"14px 16px"}}>
                 <p style={{color:T.textMd,fontSize:11,fontWeight:600,margin:"0 0 8px"}}>Resumo</p>
