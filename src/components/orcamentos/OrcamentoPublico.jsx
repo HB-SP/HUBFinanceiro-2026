@@ -27,8 +27,8 @@ const TEMA = (cor) => ({
 });
 const COR_MAIS = "#DC2626", COR_MENOS = "#16A34A";
 const TABS = [
-  { key:"comparativo", label:"Comparativo", icon:GitCompareArrows },
   { key:"resumo",      label:"Resumo",      icon:LineChart },
+  { key:"comparativo", label:"Comparativo", icon:GitCompareArrows },
 ];
 const hora = (d) => { try { return new Date(d).toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit", second:"2-digit" }); } catch { return ""; } };
 const pct = (delta, ref) => ref ? `${delta >= 0 ? "+" : "−"}${Math.abs((delta / ref) * 100).toFixed(1)}%` : null;
@@ -87,7 +87,7 @@ function BlocoGrupo({ T, titulo, cor, tot, refReal, blLabel, atualLabel, explica
 export default function OrcamentoPublico({ token }) {
   const [orc, setOrc] = useState(null);
   const [estado, setEstado] = useState("carregando"); // carregando | ok | invalido | offline
-  const [sub, setSub] = useState("comparativo");
+  const [sub, setSub] = useState("resumo");
   const [ultimaLeitura, setUltimaLeitura] = useState(null);
   const [piscou, setPiscou] = useState(false);
   const versao = useRef(null);
