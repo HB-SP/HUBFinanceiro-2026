@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, lazy, Suspense } from "react";
+import { useSincronizarEnvios } from "../hooks/useSincronizarEnvios";
 import { CATS, TIPO_COLOR, VAR_CAT_TO_CATKEY, RADIUS, FONT } from "../constants";
 import { fmt, subTotal, catTotal } from "../utils";
 import { Pill } from "./shared";
@@ -164,6 +165,8 @@ export default function CampeonatoCustom({ config, initialJogos = [], initialSer
   const setNotasMensais   = createPersistedSetter(K.notas_mensais,   setNotasMensaisRaw,   persistRefs);
   const setLivemode       = createPersistedSetter(K.livemode,        setLivemodeRaw,       persistRefs);
   const setNotasLivemode  = createPersistedSetter(K.notas_livemode,  setNotasLivemodeRaw,  persistRefs);
+  // Resumos dos envios espelham as notas vivas — ver lib/sincronizarEnvios.
+  useSincronizarEnvios({ envios, setEnvios, notas, notasMensais, notasLivemode, pronto: !loading, enabled: role === 'admin' });
   const setEventosLog     = createPersistedSetter(K.eventos_log,     setEventosLogRaw,     persistRefs);
   const setLogistica        = createPersistedSetter(K.logistica,         setLogisticaRaw,        persistRefs, { debounceMs: 500 });
   const setFornecedoresJogo = createPersistedSetter(K.fornecedores_jogo, setFornecedoresJogoRaw, persistRefs, { empty: {}, debounceMs: 500 });

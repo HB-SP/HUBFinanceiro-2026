@@ -31,6 +31,7 @@ import { FORNECEDORES_INIT } from "./data/fornecedores";
 import { COTACAO_INIT } from "./data/negociacoes";
 import { useSessionTimeout } from "./hooks/useSessionTimeout";
 import { useAgendaPortal } from "./hooks/useAgendaPortal";
+import { useSincronizarEnvios } from "./hooks/useSincronizarEnvios";
 
 
 // ─── BRASILEIRÃO ──────────────────────────────────────────────────────────────
@@ -189,6 +190,8 @@ function Brasileirao({ onBack, onOpenHub, T, darkMode, setDarkMode, role = 'admi
   // do hub_jogo_id na adoção exige papel de escrita; um visualizador com a tela
   // aberta gravaria pela metade e o jogo novo poderia ser adotado em dobro.
   useAgendaPortal({ tabela: 'brasileirao_jogos', tabelaPeriferico: 'perifericos_brasileirao', rodadaCol: 'eu', jogos, setJogos, pronto: !loading, enabled: role === 'admin' });
+  // Resumos dos envios espelham as notas vivas (nº, data, valor, anexo) — ver lib/sincronizarEnvios.
+  useSincronizarEnvios({ envios, setEnvios, notas, notasMensais, notasLivemode: [...notasLivemode, ...notasLiveU], pronto: !loading, enabled: role === 'admin', dedupeNotasPorNF: true });
 
   // Rateio de notas mensais "Seg. Espacial" entre jogos do mês
   // Rateia Seg. Espacial entre os jogos do mês. Quando o mês não tem nenhum jogo

@@ -29,6 +29,7 @@ import { FORNECEDORES_INIT } from "../data/fornecedores";
 import { COTACAO_INIT } from "../data/negociacoes";
 import { PAULISTAO_JOGOS_INIT, PAULISTAO_SERVICOS_INIT, getFase, ordemFase } from "../data/paulistao";
 import { useAgendaPortal } from "../hooks/useAgendaPortal";
+import { useSincronizarEnvios } from "../hooks/useSincronizarEnvios";
 
 // Agrupador da Rastreabilidade "Por Rodada": fase + rodada, senão a "Rodada 1"
 // da fase de grupos colidiria com a "Rodada 1" do mata-mata.
@@ -276,6 +277,7 @@ export default function Paulistao({ onBack, onOpenHub, T, darkMode, setDarkMode,
   // dos jogos vem de lá; orçamento/realizado continuam 100% do Hub.
   // Só admin roda o sync/adoção (ver comentário no App.jsx — RLS do Portal)
   useAgendaPortal({ tabela: 'paulistao_feminino_jogos', tabelaPeriferico: 'perifericos_paulistao', rodadaCol: 'rod', extras: [['dia', 'dia'], ['estadio', 'estadio']], jogos, setJogos, pronto: !loading, enabled: role === 'admin' });
+  useSincronizarEnvios({ envios, setEnvios, notas, notasMensais, notasLivemode, pronto: !loading, enabled: role === 'admin', dedupeNotasPorNF: true });
 
   // Rateia Seg. Espacial entre os jogos do mês. Quando o mês não tem nenhum jogo,
   // não tem jogo pra receber o rateio -- o valor ia sendo descartado do realizado
