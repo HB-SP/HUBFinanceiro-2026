@@ -52,7 +52,7 @@ const Numero = ({ T, label, valor, sub, cor }) => (
 );
 
 // ── Tabela comparativa: espelho da tabela do Hub ─────────────────────────────
-function TabelaComparativo({ T, orc, diff, explicacoes }) {
+export function TabelaComparativo({ T, orc, diff, explicacoes }) {
   const bl = orc.baseline;
   const atualLabel = `${orc.meta.nome} ${orc.meta.edicao}`;
   const refReal = !!diff.temRealizado;                    // Hub: realizado é a referência padrão quando existe
@@ -89,9 +89,10 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
   const nCols = refReal ? 6 : 5;
 
   const Selo = ({ status }) => { const s = SELOS[status]; return s ? <span style={{ fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", whiteSpace:"nowrap", padding:"2px 8px", borderRadius:999, background:`${s.color}1c`, color:s.color, border:`1px solid ${s.color}44` }}>{s.label}</span> : null; };
-  const Delta = ({ delta, ref, peso }) => (
+  // prop chama-se refValor de propósito: `ref` é reservado pelo React (um número ali derruba a página)
+  const Delta = ({ delta, refValor, peso }) => (
     <td style={num({ fontWeight: peso ? 800 : 600, color: deltaCor(delta, T), lineHeight:1.15 })}>
-      {fmtDelta(delta)}{Math.round(delta) !== 0 && pct(delta, ref) && <div style={{ fontSize:9.5, fontWeight:500, color:T.textSm }}>{pct(delta, ref)}</div>}
+      {fmtDelta(delta)}{Math.round(delta) !== 0 && pct(delta, refValor) && <div style={{ fontSize:9.5, fontWeight:500, color:T.textSm }}>{pct(delta, refValor)}</div>}
     </td>
   );
 
@@ -109,7 +110,7 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
       <td style={num({ fontWeight:700 })}>{fmt(b.totalBase)}</td>
       {refReal && <td style={num({ fontWeight:700 })}>{fmt(b.totalReal)}</td>}
       <td style={num({ fontWeight:800, color:T.info })}>{fmt(b.totalAtual)}</td>
-      <Delta delta={b.delta} ref={refReal ? b.totalReal : b.totalBase} peso/>
+      <Delta delta={b.delta} refValor={refReal ? b.totalReal : b.totalBase} peso/>
       <td/>
     </tr>
   );
@@ -121,7 +122,7 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
       <td style={num({ fontWeight:700 })}>{fmt(g.totalBase)}</td>
       {refReal && <td style={num({ fontWeight:700 })}>{fmt(g.totalReal)}</td>}
       <td style={num({ fontWeight:700, color:T.info })}>{fmt(g.totalAtual)}</td>
-      <Delta delta={g.delta} ref={refReal ? g.totalReal : g.totalBase} peso/>
+      <Delta delta={g.delta} refValor={refReal ? g.totalReal : g.totalBase} peso/>
       <td/>
     </tr>
   );
@@ -143,7 +144,7 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
       <td style={num({ color:T.textMd })}>{fmt(row.base)}</td>
       {refReal && <td style={num({ color:T.textMd })}>{row.real == null ? "—" : fmt(row.real)}</td>}
       <td style={num({ color:T.text, fontWeight:600 })}>{fmt(row.atual)}</td>
-      <Delta delta={row.delta} ref={refReal ? row.real : row.base}/>
+      <Delta delta={row.delta} refValor={refReal ? row.real : row.base}/>
       <td style={{ padding:`7px ${PADX}px`, whiteSpace:"nowrap" }}><Selo status={row.status}/></td>
     </tr>
   );
@@ -153,7 +154,7 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
       <td style={num({ fontWeight:700 })}>{fmt(b.totalBase)}</td>
       {refReal && <td style={num({ fontWeight:700 })}>{fmt(b.totalReal)}</td>}
       <td style={num({ fontWeight:700, color:T.info })}>{fmt(b.totalAtual)}</td>
-      <Delta delta={b.delta} ref={refReal ? b.totalReal : b.totalBase} peso/>
+      <Delta delta={b.delta} refValor={refReal ? b.totalReal : b.totalBase} peso/>
       <td/>
     </tr>
   );
@@ -190,7 +191,7 @@ function TabelaComparativo({ T, orc, diff, explicacoes }) {
               <td style={num({ fontWeight:800 })}>{fmt(diff.totalBase)}</td>
               {refReal && <td style={num({ fontWeight:800 })}>{fmt(diff.totalReal)}</td>}
               <td style={num({ fontWeight:800, color:T.info, fontSize:13 })}>{fmt(diff.totalAtual)}</td>
-              <Delta delta={V.delta} ref={V.totalRef} peso/>
+              <Delta delta={V.delta} refValor={V.totalRef} peso/>
               <td/>
             </tr>
           </tbody>
