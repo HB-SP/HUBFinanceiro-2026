@@ -33,6 +33,7 @@ export default function OrcamentoPublico({ token }) {
   const [ultimaLeitura, setUltimaLeitura] = useState(null);
   const [piscou, setPiscou] = useState(false);
   const versao = useRef(null);
+  const jaCarregou = useRef(false); // o closure de ler() não vê o estado atual; usa ref para saber se é atualização
 
   useEffect(() => {
     let vivo = true, timer = null;
@@ -45,7 +46,8 @@ export default function OrcamentoPublico({ token }) {
         if (v !== versao.current) {
           versao.current = v;
           setOrc(doc);
-          if (estado === "ok") { setPiscou(true); setTimeout(() => vivo && setPiscou(false), 1500); }
+          if (jaCarregou.current) { setPiscou(true); setTimeout(() => vivo && setPiscou(false), 1500); }
+          jaCarregou.current = true;
         }
         setUltimaLeitura(new Date());
         setEstado("ok");
