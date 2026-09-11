@@ -4,7 +4,7 @@ import { Card, SectionHeader, Badge, Button, Chip } from "../ui";
 import { FASES_PRESETS } from "../../data/customCampeonato";
 import { ORC_STATUS } from "../../data/orcamentos";
 import { ENTIDADES_VISUALIZADOR } from "../../config/entities";
-import { Settings, History, Send, Undo2, Trophy, Lock, Users, Plus, X, CalendarDays } from "lucide-react";
+import { Settings, History, Send, Undo2, Trophy, Lock, Users, Plus, X, CalendarDays, Link2, Copy, ExternalLink, Ban } from "lucide-react";
 
 const COR_PRESETS = ["#ec4899","#10b981","#3b82f6","#f59e0b","#8b5cf6","#ef4444","#06b6d4","#22c55e"];
 
@@ -26,6 +26,19 @@ export default function SubConfiguracao({ orc, setOrc, readOnly, T, eventos = []
   const [novoTime, setNovoTime] = useState("");
 
   const setMeta = (patch) => setOrc(prev => ({ ...prev, meta: { ...prev.meta, ...patch } }));
+
+  // Link externo de visualização (#orcamento/<token>): só leitura, sem login,
+  // atualiza sozinho quando o orçamento muda aqui. Revogar apaga o token.
+  const linkPublico = m.publicToken ? `${window.location.origin}${window.location.pathname}#orcamento/${m.publicToken}` : null;
+  const gerarLink = () => {
+    const token = (globalThis.crypto?.randomUUID?.() || (Date.now().toString(36) + Math.random().toString(36).slice(2, 12))).replace(/-/g, "");
+    setMeta({ publicToken: token, publicTokenCriadoEm: new Date().toISOString() });
+  };
+  const revogarLink = () => {
+    if (!window.confirm("Revogar o link externo? Quem tiver o link atual deixa de ver o orçamento. Você pode gerar um novo depois.")) return;
+    setMeta({ publicToken: null, publicTokenRevogadoEm: new Date().toISOString() });
+  };
+  const copiarLink = async () => { try { await navigator.clipboard.writeText(linkPublico); window.alert("Link copiado."); } catch { window.prompt("Copie o link:", linkPublico); } };
 
   const times = orc.times || [];
   const addTime = (nome) => {
@@ -243,6 +256,26 @@ export default function SubConfiguracao({ orc, setOrc, readOnly, T, eventos = []
       </div>
 
       {/* ── Timeline de eventos ── */}
+      <Card T={T}>
+        <SectionHeader T={T} icon={Link2} title="Link externo de visualização"
+          subtitle="Para apresentar a quem não tem acesso ao Hub. Somente leitura, sem login, e acompanha as edições feitas aqui em tempo real."
+          right={m.publicToken ? <Badge T={T} color="#10b981">Ativo</Badge> : <Badge T={T} color="#94a3b8">Sem link</Badge>}/>
+        <div style={{padding:20,display:"flex",flexDirection:"column",gap:12}}>
+          {linkPublico ? (<>
+            <code style={{display:"block",fontSize:12,padding:"10px 12px",background:T.surfaceAlt||T.bg,border:`1px solid ${T.border}`,borderRadius:8,wordBreak:"break-all",color:T.text}}>{linkPublico}</code>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <Button T={T} variant="primary" size="sm" icon={Copy} onClick={copiarLink}>Copiar link</Button>
+              <Button T={T} size="sm" icon={ExternalLink} onClick={() => window.open(linkPublico, "_blank", "noopener")}>Abrir</Button>
+              {!readOnly && <Button T={T} size="sm" icon={Ban} onClick={revogarLink}>Revogar</Button>}
+            </div>
+            <p style={{margin:0,color:T.textSm,fontSize:11}}>Criado em {m.publicTokenCriadoEm ? new Date(m.publicTokenCriadoEm).toLocaleString("pt-BR") : "—"}. Quem abrir vê Resumo, Jogos, Serviços e Comparativo, sem poder editar.</p>
+          </>) : (<>
+            <p style={{margin:0,color:T.textMd,fontSize:13}}>Nenhum link ativo. Gere um para compartilhar a apresentação deste orçamento.</p>
+            {!readOnly && <div><Button T={T} variant="primary" size="sm" icon={Link2} onClick={gerarLink}>Gerar link externo</Button></div>}
+          </>)}
+        </div>
+      </Card>
+
       <Card T={T}>
         <SectionHeader T={T} icon={History} title="Eventos" subtitle="Histórico do orçamento"/>
         <div style={{padding:"12px 20px 20px",maxHeight:480,overflowY:"auto"}}>

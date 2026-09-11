@@ -291,6 +291,7 @@ export const publicoFornecedores = (key = 'fornecedores') => rpc('publico_fornec
 export const publicoJogos        = (key = 'jogos')        => rpc('publico_jogos', { p_key: key }, 'carregar jogos');
 // → { stateKey, envio } ou null
 export const publicoEnvio        = (token)                => rpc('publico_envio', { p_token: token }, 'carregar envio');
+export const publicoOrcamento    = (token)                => rpc('publico_orcamento', { p_token: token }, 'carregar orçamento');
 export const publicoNFFile       = (token, notaId)        => rpc('publico_nf_file', { p_token: token, p_nota_id: String(notaId) }, `baixar NF ${notaId}`);
 export const publicoEnvioMarcarPago = (token, nome)       => rpc('publico_envio_marcar_pago', { p_token: token, p_nome: nome || null }, 'confirmar pagamento');
 export const publicoEnvioStatusNota = (token, campo, notaId, status, nome) =>

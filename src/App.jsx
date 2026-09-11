@@ -1004,6 +1004,7 @@ import AdminUsuarios from "./components/AdminUsuarios";
 import FormularioPublico from "./components/FormularioPublico";
 import FormularioPublicoPaulistao from "./components/FormularioPublicoPaulistao";
 import EnvioPublico from "./components/EnvioPublico";
+import OrcamentoPublico from "./components/orcamentos/OrcamentoPublico";
 import HubFornecedores from "./components/HubFornecedores";
 import HubOrcamentos from "./components/HubOrcamentos";
 import Paulistao from "./components/Paulistao";
@@ -1288,6 +1289,8 @@ export default function App() {
   if (currentHash === "#formulario-paulistao") return <FormularioPublicoPaulistao/>;
   const envioMatch = currentHash.match(/^#envio\/(.+)$/);
   if (envioMatch) return <EnvioPublico envioRef={envioMatch[1]}/>;
+  const orcMatch = currentHash.match(/^#orcamento\/(.+)$/);
+  if (orcMatch) return <OrcamentoPublico token={decodeURIComponent(orcMatch[1])}/>;
 
   // Auth loading
   if (authLoading) return <LoadingScreen T={T}/>;

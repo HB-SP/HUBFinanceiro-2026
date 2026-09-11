@@ -18,7 +18,7 @@ import SubServicos from "./SubServicos";
 import SubResumo from "./SubResumo";
 import SubComparativo from "./SubComparativo";
 
-const SUBTABS = [
+export const SUBTABS = [
   { key:"config",      label:"Configuração",        icon:Settings },
   { key:"premissas",   label:"Padrões & Premissas", icon:Layers },
   { key:"pracas",      label:"Praças & Logística",  icon:MapPin },
@@ -31,9 +31,9 @@ const SUBTABS = [
 // Visualizador (entidade) vê só o que é proposta: valores por jogo, fixos,
 // comparativo com a edição anterior e resumo. Configuração, premissas e
 // praças são engenharia interna de custo.
-const SUBTABS_VIEWER = ["resumo", "jogos", "servicos", "comparativo"];
+export const SUBTABS_VIEWER = ["resumo", "jogos", "servicos", "comparativo"];
 
-function SubTabNav({ active, onChange, T, tabs = SUBTABS }) {
+export function SubTabNav({ active, onChange, T, tabs = SUBTABS }) {
   return (
     <div style={{
       display:"flex",
