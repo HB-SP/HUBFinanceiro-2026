@@ -12,19 +12,18 @@ import { normalizeEnvioMetricas } from "./notasFiscais";
 // Esta função devolve os envios com os resumos alinhados às notas vivas. Só cria
 // objetos novos onde algo mudou (referência igual = nada a gravar).
 
-// Só os campos que precisam estar CERTOS no envio e no Portal: identificação da
-// nota (nº, código, fornecedor), valor, data de emissão e existência do anexo.
-// Campos descritivos (categoria, mesLabel, rótulos de serviço, jogo/rodada) ficam
-// como estavam quando a nota entrou no envio — o envio é registro do que foi
-// enviado à entidade, e recategorizações posteriores não devem reescrevê-lo.
-// fileHash também fica de fora: resumos antigos nunca tiveram o campo e incluí-lo
-// reescreveria todos os envios sem ganho.
+// Nota e envio são um organismo único (decisão do financeiro, 11/09/2026): TUDO
+// que descreve a nota acompanha — identificação (nº, código, fornecedor), valor,
+// data de emissão, anexo e também categoria, mês, rótulos de serviço, jogo e
+// rodada. O que fica só do envio são os dados de PAGAMENTO (statusNota, pago,
+// dataPagamento, pagoPor), que não existem na nota. fileHash fica de fora:
+// resumos antigos nunca tiveram o campo e incluí-lo reescreveria todos os envios.
 const CAMPOS = {
-  nota:      ["codigo", "fornecedor", "valorNF", "numeroNF", "dataEmissao", "hasFile"],
-  mensal:    ["fornecedor", "valor", "numeroNF", "dataEmissao", "hasFile"],
-  livemode:  ["fornecedor", "valor", "numeroNF", "dataEmissao", "hasFile"],
+  nota:      ["codigo", "fornecedor", "valorNF", "numeroNF", "jogoLabel", "rodada", "servicosLabels", "dataEmissao", "hasFile"],
+  mensal:    ["fornecedor", "valor", "numeroNF", "categoria", "mesLabel", "dataEmissao", "hasFile"],
+  livemode:  ["fornecedor", "valor", "numeroNF", "rodada", "rodadas", "rodadasLabel", "servicosLabels", "dataEmissao", "hasFile"],
   // reembolso Livemode mora em `notas` (tipo reembolso_livemode) mas entra no livemodeResumo com valor = valorNF
-  reembolso: ["codigo", "fornecedor", "numeroNF", "dataEmissao", "hasFile"],
+  reembolso: ["codigo", "fornecedor", "numeroNF", "rodada", "rodadas", "rodadasLabel", "jogoLabel", "servicosLabels", "dataEmissao", "hasFile"],
 };
 
 const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
