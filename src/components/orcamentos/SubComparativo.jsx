@@ -4,7 +4,7 @@ import { Card, SectionHeader, Stat, Button } from "../ui";
 import {
   diffBaseline, novaBaseline, GRUPOS_COMPARATIVO,
 } from "../../data/orcamentos";
-import { fmt, fmtK } from "../../utils";
+import { fmtOrc as fmt, fmtOrcK as fmtK } from "../../data/orcamentos";
 import {
   GitCompareArrows, Wallet, TrendingUp, TrendingDown, Sparkles, Receipt,
   Pencil, Check, Plus, X, Briefcase, Layers, GripVertical, ArrowDownWideNarrow,

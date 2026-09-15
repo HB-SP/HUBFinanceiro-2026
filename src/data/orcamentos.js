@@ -16,6 +16,11 @@ import { SERVICOS_INIT } from "../data";
 import { slugify } from "./customCampeonato";
 import { podeVerCampeonato } from "../config/entities";
 
+// Formatação do MÓDULO DE ORÇAMENTO: sempre em reais inteiros, sem centavos
+// (decisão do financeiro, 15/09/2026). O restante do Hub continua com utils.fmt.
+export const fmtOrc  = v => "R$ " + Math.round(Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 0 });
+export const fmtOrcK = v => "R$" + Math.round((Number(v) || 0) / 1000) + "k";
+
 // Visibilidade do orçamento para o visualizador: mesma regra dos campeonatos
 // custom — dono = meta.organizador (FFU/FPF); sem organizador ou "outro" só
 // aparece para admin e para visualizador "outro"/sem entidade.

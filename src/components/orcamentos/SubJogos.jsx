@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { iSty, CATS, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Badge, tableStyles } from "../ui";
 import { calcOrcadoJogo, blocosJogo, GRUPOS_PREMISSA, SUBS_NAO_EDITAVEIS, DSLR_QTDS, valorDSLR, dslrQtdEfetiva } from "../../data/orcamentos";
-import { fmt } from "../../utils";
+import { fmtOrc as fmt } from "../../data/orcamentos";
 import { CalendarDays, Plus, Trash2, Copy, ChevronDown, ChevronUp, Eraser, Zap } from "lucide-react";
 
 // Modos de agrupamento da lista de jogos. Cada grupo mostra nº de jogos e total.

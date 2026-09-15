@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RADIUS, FONT } from "../../constants";
 import { Button } from "../ui";
-import { fmt } from "../../utils";
+import { fmtOrc as fmt } from "../../data/orcamentos";
 import { slugify } from "../../data/customCampeonato";
 import { calcTotais } from "../../data/orcamentos";
 import { Trophy, AlertCircle, Lock } from "lucide-react";

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { FONT } from "../../constants";
 import { Card, Button, Progress, Badge } from "../ui";
 import { calcTotais, calcOrcadoJogo, ORC_STATUS, MACRO_GRUPOS_VARIAVEIS, MACRO_OUTROS } from "../../data/orcamentos";
-import { fmt, fmtK } from "../../utils";
+import { fmtOrc as fmt, fmtOrcK as fmtK } from "../../data/orcamentos";
 import { Wallet, CalendarDays, Briefcase, Trophy, AlertCircle, ChevronRight } from "lucide-react";
 
 const COR_VAR  = "#2563EB"; // custos variáveis (por jogo)

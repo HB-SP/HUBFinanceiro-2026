@@ -2,7 +2,7 @@ import { useState } from "react";
 import { iSty, FONT, SECAO_COLORS } from "../../constants";
 import { Card, SectionHeader, Button, tableStyles } from "../ui";
 import { CATALOGO_SERVICOS_FIXOS, totalFixos } from "../../data/orcamentos";
-import { fmt } from "../../utils";
+import { fmtOrc as fmt } from "../../data/orcamentos";
 import { Briefcase, Plus, Trash2 } from "lucide-react";
 
 // Seções padrão dos outros campeonatos + as que já existirem no orçamento.

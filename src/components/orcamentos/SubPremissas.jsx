@@ -2,7 +2,7 @@ import { useState } from "react";
 import { iSty, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Badge, tableStyles } from "../ui";
 import { PADROES_SUGERIDOS, GRUPOS_PREMISSA, GRUPO_LOGISTICA_PADRAO, SUBS_PADRAO_FAIXA_KEYS, SUBS_NAO_EDITAVEIS, DSLR_QTDS, MATRIZ_DSLR_QTD_KEY, valorDSLR, umKeyDoPadrao } from "../../data/orcamentos";
-import { fmt } from "../../utils";
+import { fmtOrc as fmt } from "../../data/orcamentos";
 import { Layers, Plus, Trash2, Copy, ChevronDown, ChevronUp } from "lucide-react";
 
 // Premissas por padrão: o que compõe um jogo daquele padrão (pessoal +

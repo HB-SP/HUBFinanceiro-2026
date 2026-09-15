@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { iSty, FONT } from "../../constants";
 import { Card, SectionHeader, Button, Stat, Badge, tableStyles } from "../ui";
 import { SUBS_LOGISTICA, logisticaDaPraca, calcOrcadoJogo } from "../../data/orcamentos";
-import { fmt, fmtK } from "../../utils";
+import { fmtOrc as fmt, fmtOrcK as fmtK } from "../../data/orcamentos";
 import { MapPin, MapPinOff, Route, Plus, Trash2, Wallet, SlidersHorizontal, Link2, Unlink2, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
 // ─── PRAÇAS & LOGÍSTICA ───────────────────────────────────────────────────────

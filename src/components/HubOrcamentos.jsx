@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { RADIUS, FONT, CAMPEONATOS } from "../constants";
 import { getState, setState as setSupabaseState, supabase, createPersistedSetter, isPersistPending, appendState } from "../lib/supabase";
 import { ORC_REGISTRY_KEY, orcKey, orcEventosKey, ORC_STATUS, podeVerOrcamento } from "../data/orcamentos";
-import { fmt, fmtK } from "../utils";
+import { fmtOrc as fmt, fmtOrcK as fmtK } from "../data/orcamentos";
 import { Stat, Badge, Button, IconButton } from "./ui";
 import LivemodeLogo from "./LivemodeLogo";
 import {

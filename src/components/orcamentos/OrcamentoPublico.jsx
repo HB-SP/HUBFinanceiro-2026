@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { publicoOrcamento } from "../../lib/supabase";
 import { ORC_STATUS, calcTotais, diffBaseline } from "../../data/orcamentos";
-import { fmt } from "../../utils";
+import { fmtOrc as fmt } from "../../data/orcamentos";
 import { SubTabNav } from "./OrcamentoEditor";
 import SubResumo from "./SubResumo";
 import { Radio, Lock, GitCompareArrows, LineChart, ExternalLink, Layers, Briefcase } from "lucide-react";
