@@ -119,11 +119,14 @@ export function calcFixos({ servicos = [], notasMensais = [], jogos = [], mesSel
   });
 
   // NFs sem serviço (ou de serviço já excluído) e sem categoria variável: mesma
-  // regra do "Outros Mensais" do dashboard. Só realizado; sem orçado/provisionado.
+  // regra do "Outros Mensais" do dashboard. Não há item na aba Serviços, logo
+  // não há orçado nem provisionado — é a ÚNICA linha em que Realizado = valor
+  // das NFs recebidas (decisão do usuário, 15/09/2026). Entra no total e no
+  // saldo (0 − NFs), senão o saldo dos fixos fica otimista nesse valor.
   const outrosGasto = notasMensais
     .filter(n => (!n.servicoId || !idsValidos.has(n.servicoId)) && !VAR_CATS_FIX.has(n.categoria) && n.mes <= mesAtual)
     .reduce((s, n) => s + (n.valor || 0), 0);
-  if (outrosGasto > 0) sections.push({ secao: "Outros Mensais", outros: true, orcAnual: 0, provAnual: 0, orc: 0, prov: 0, gasto: outrosGasto, saldo: 0, itens: [] });
+  if (outrosGasto > 0) sections.push({ secao: "Outros Mensais", outros: true, orcAnual: 0, provAnual: 0, orc: 0, prov: outrosGasto, gasto: outrosGasto, saldo: -outrosGasto, itens: [] });
 
   const tot = k => sections.reduce((s, x) => s + x[k], 0);
   const orcAnualTotal = tot("orcAnual"), provAnualTotal = tot("provAnual");

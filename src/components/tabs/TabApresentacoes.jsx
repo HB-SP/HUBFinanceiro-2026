@@ -178,9 +178,9 @@ function SlideFixos({ d, T }) {
                         </div>
                       </td>
                       <td style={{...tdSty(true),color:T.textMd}} className="num">{s.outros ? "—" : fmtR(s.orc)}</td>
-                      <td style={{...tdSty(true),color:T.text}} className="num">{s.outros ? "—" : fmtR(s.prov)}</td>
+                      <td style={{...tdSty(true),color:T.text}} className="num" title={s.outros ? "Sem serviço na aba Serviços: realizado = NFs recebidas" : undefined}>{fmtR(s.prov)}</td>
                       <td style={{...tdSty(true),color:"#16a34a"}} className="num">{fmtR(s.gasto)}</td>
-                      <td style={{...tdSty(true),fontWeight:700,color:s.outros?T.textSm:corSaldo(s.saldo)}} className="num">{s.outros ? "—" : seta(s.saldo)}</td>
+                      <td style={{...tdSty(true),fontWeight:700,color:corSaldo(s.saldo)}} className="num">{seta(s.saldo)}</td>
                     </tr>
                     {expanded && s.itens.length > 0 && (
                       <tr style={{background:T.bg}}>
