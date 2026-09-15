@@ -382,25 +382,6 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
   ); };
 
   // Cabeçalho de categoria (grupo variável) — clicável para recolher.
-  const renderExplicacao = (chave, color) => {
-    const texto = explicacoes[chave] || "";
-    if (readOnly && !texto) return null;
-    return (
-      <tr key={`ex_${chave}`} style={{ background: T.card }}>
-        <td colSpan={99} style={{ padding: `6px ${PADX}px 12px ${PADX + 18}px`, borderLeft: `3px solid ${color}55` }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: T.textSm, marginBottom: 4 }}>
-            Explicação para a entidade <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>· aparece no link externo</span>
-          </div>
-          {readOnly
-            ? <p style={{ margin: 0, fontSize: 13, lineHeight: 1.5, color: T.text, whiteSpace: "pre-wrap" }}>{texto}</p>
-            : <textarea value={texto} onChange={e => setExplicacao(chave, e.target.value)} rows={texto.split("\n").length + 1}
-                placeholder="Por que este grupo muda em relação à edição anterior? (texto livre — fica visível para quem abrir o link externo)"
-                style={{ ...iSty(T), width: "100%", minHeight: 56, resize: "vertical", fontSize: 13, lineHeight: 1.5, fontFamily: "inherit" }}/>}
-        </td>
-      </tr>
-    );
-  };
-
   const renderHeaderGrupo = (titulo, color, tot, { chave, rows } = {}) => {
     const aberto = !chave || estaAberto(chave);
     const clicavel = !!chave && !editando;
@@ -643,7 +624,6 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
               {estaAberto("variaveis") && V.grupos.map(g => (g.rows.length > 0 || editando) ? [
                 renderHeaderGrupo(g.label, g.color, g, { chave:g.key, rows:g.rows }),
                 ...(estaAberto(g.key) ? [
-                  renderExplicacao(g.key, g.color),
                   ...g.rows.map((row, i) => renderRow(row, g, "itens", blocos.variaveis.maxAbs, i)),
                   renderAddLinha("var", g.key),
                 ] : []),
@@ -658,7 +638,6 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
                 return [
                   renderHeaderGrupo(sec.secao, "#a855f7", sec, { chave:chaveSec, rows:sec.rows }),
                   ...(secAberta ? [
-                    renderExplicacao(chaveSec, "#a855f7"),
                     ...sec.rows.map((row, i) => renderRow(row, sec, "fixos", blocos.fixos.maxAbs, i)),
                     renderAddLinha("fixo", null, sec.secao),
                   ] : []),
