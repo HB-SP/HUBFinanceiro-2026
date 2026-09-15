@@ -137,10 +137,10 @@ function SlideFixos({ d, T }) {
     <div>
       <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Aba Serviços rateada até ${d.mesLabel} · saldo = orçado − realizado`} T={T}/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:20}}>
-        <KPI label="Orçamento Total" value={fmtR(d.orcAnualTotal)} sub={`Campeonato (${d.mesesCampeonato} meses) · aba Serviços`} color={T.textSm} T={T}/>
-        <KPI label={`Orçado até ${d.mesLabel}`} value={fmtR(d.orcTotal)} sub={`${d.mesesDecorridos} de ${d.mesesCampeonato} meses`} color="#94a3b8" T={T}/>
-        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.provTotal)} sub={`Mesmo rateio do orçado · NFs recebidas: ${fmtRs(d.gastoTotal)}`} color={T.info} T={T}/>
-        <KPI label="Saldo" value={seta(d.saldoTotal)} sub="Orçado − Realizado" color={corSaldo(d.saldoTotal)} T={T}/>
+        <KPI label="Orçamento Total" value={fmtR(d.orcAnualTotal)} color={T.textSm} T={T}/>
+        <KPI label={`Orçado até ${d.mesLabel}`} value={fmtR(d.orcTotal)} color="#94a3b8" T={T}/>
+        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.provTotal)} color={T.info} T={T}/>
+        <KPI label="Saldo" value={seta(d.saldoTotal)} color={corSaldo(d.saldoTotal)} T={T}/>
       </div>
       <Card T={T} style={{marginBottom:16}}>
         <div style={{padding:"16px 20px"}}>
@@ -253,9 +253,9 @@ function SlideVisaoGeral({ vg, T }) {
     <div>
       <TituloView icone={LayoutGrid} cor="#7c3aed" corFundo="rgba(124,58,237,0.12)" titulo="Visão Geral Orçamentária" subtitulo="Consolidado dos pilares: Variáveis + Fixos · saldo = orçado − realizado" T={T}/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16,marginBottom:20}}>
-        <KPI label="Orçamento Total do Campeonato" value={fmtR(vg.orcTotalCampeonato)} sub="Variáveis + Fixos (anual)" color={T.textSm} T={T}/>
-        <KPI label="Realizado (Atual)" value={fmtR(vg.provTotalGlobal)} sub={`Variáveis até R${vg.rodadaAtual} + Fixos até ${vg.mesLabel}`} color={T.text} T={T}/>
-        <KPI label="Saldo Global" value={seta(vg.saldoGlobal)} sub={`${Math.abs(vg.saldoGlobalPct).toFixed(1)}% do orçado do período · Orçado − Realizado`} color={vg.saldoGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
+        <KPI label="Orçamento Total do Campeonato" value={fmtR(vg.orcTotalCampeonato)} color={T.textSm} T={T}/>
+        <KPI label="Realizado (Atual)" value={fmtR(vg.provTotalGlobal)} color={T.text} T={T}/>
+        <KPI label="Saldo Global" value={seta(vg.saldoGlobal)} color={vg.saldoGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
       </div>
       <p style={{textAlign:"center",fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Síntese dos Pilares</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:20}}>
