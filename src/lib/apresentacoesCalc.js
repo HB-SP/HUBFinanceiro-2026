@@ -60,10 +60,12 @@ export function calcVariaveis({ jogos = [], rodadaSel = null, overrides = {}, nf
 // ─── CUSTOS FIXOS ────────────────────────────────────────────────────────────
 // Regra única (15/09/2026), só para a aba Apresentações. Fonte é a aba Serviços
 // (mesma do dashboard); nada de override manual aqui.
-//   Orçado       = orcado do item × fator liberado até a referência
-//   Provisionado = provisionado do item × o MESMO fator
-//   Realizado    = NFs mensais já recebidas do serviço (mes ≤ referência)
-//   Saldo        = Orçado − Provisionado (NF que não chegou não é saving)
+//   Orçado        = orcado do item × fator liberado até a referência
+//   Realizado     = provisionado do item × o MESMO fator (na tela chama-se
+//                   "Realizado": é o que já está comprometido, NF tendo chegado
+//                   ou não — evita falso saving). Campo interno: prov.
+//   NFs recebidas = notas mensais já recebidas do serviço (informativo). Campo: gasto/nf.
+//   Saldo         = Orçado − Realizado(prov)
 // Fator por tipo do item:
 //   linear     → meses decorridos ÷ meses do campeonato
 //   pontual    → 100% quando o mês alocado passou (fração se houver vários)
@@ -136,10 +138,10 @@ export function calcFixos({ servicos = [], notasMensais = [], jogos = [], mesSel
 }
 
 // ─── VISÃO GERAL ─────────────────────────────────────────────────────────────
-// Consolida calcVariaveis + calcFixos com a mesma leitura dos fixos: saldo =
-// orçado − provisionado; realizado (NFs) é informativo. Nas variáveis a coluna
-// "realizado" da tabela já é o provisionado (mesma fonte da aba Savings) e
-// nfRecV é o realizado das NFs — os dois pilares consolidam com o mesmo critério.
+// Consolida calcVariaveis + calcFixos. Nos dois pilares "Realizado" é o
+// provisionado (variáveis: coluna realizado da tabela = provisionado, mesma
+// fonte da aba Savings; fixos: prov rateado) e saldo = orçado − realizado.
+// NFs recebidas (varReal/fixReal) ficam disponíveis só como informação.
 export function calcVisaoGeral({ dadosVar, dadosFix, orcGlobalVar = 0 }) {
   const varOrc = dadosVar?.totOrc ?? 0;
   const varProv = dadosVar?.totReal ?? 0;

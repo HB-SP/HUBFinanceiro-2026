@@ -122,8 +122,9 @@ function SlideVariaveis({ d, T }) {
 }
 
 // ─── VIEW CUSTOS FIXOS ───────────────────────────────────────────────────────
-// Regra: orçado e provisionado = aba Serviços rateada até o mês/rodada;
-// realizado = NFs recebidas; saldo = orçado − provisionado. Sem overrides.
+// Regra: orçado e realizado = aba Serviços rateada até o mês/rodada (realizado
+// é o provisionado do item — comprometido, com ou sem NF); NFs recebidas são
+// informativas; saldo = orçado − realizado. Sem overrides.
 const corTipo = (tipo, T) => tipo === "pontual" ? "#d97706" : tipo === "por_rodada" ? "#2563eb" : tipo === "misto" ? "#7c3aed" : tipo === "encerrado" ? "#6b7280" : T.textSm;
 const seta = v => (v >= 0 ? "▲ " : "▼ ") + fmtR(Math.abs(v));
 const corSaldo = v => v >= 0 ? "#22c55e" : "#ef4444";
@@ -134,19 +135,18 @@ function SlideFixos({ d, T }) {
   const pctProv = Math.min(1, d.provTotal / (d.orcTotal || 1));
   return (
     <div>
-      <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Aba Serviços rateada até ${d.mesLabel} · realizado = NFs recebidas · saldo = orçado − provisionado`} T={T}/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:20}}>
+      <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Aba Serviços rateada até ${d.mesLabel} · saldo = orçado − realizado`} T={T}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:20}}>
         <KPI label="Orçamento Total" value={fmtR(d.orcAnualTotal)} sub={`Campeonato (${d.mesesCampeonato} meses) · aba Serviços`} color={T.textSm} T={T}/>
         <KPI label={`Orçado até ${d.mesLabel}`} value={fmtR(d.orcTotal)} sub={`${d.mesesDecorridos} de ${d.mesesCampeonato} meses`} color="#94a3b8" T={T}/>
-        <KPI label={`Provisionado até ${d.mesLabel}`} value={fmtR(d.provTotal)} sub="Mesmo rateio do orçado" color={T.info} T={T}/>
-        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.gastoTotal)} sub="NFs recebidas" color="#16a34a" T={T}/>
-        <KPI label="Saldo" value={seta(d.saldoTotal)} sub="Orçado − Provisionado" color={corSaldo(d.saldoTotal)} T={T}/>
+        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.provTotal)} sub={`Mesmo rateio do orçado · NFs recebidas: ${fmtRs(d.gastoTotal)}`} color={T.info} T={T}/>
+        <KPI label="Saldo" value={seta(d.saldoTotal)} sub="Orçado − Realizado" color={corSaldo(d.saldoTotal)} T={T}/>
       </div>
       <Card T={T} style={{marginBottom:16}}>
         <div style={{padding:"16px 20px"}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Provisionado sobre Orçado</span>
-            <span style={{fontSize:11,color:T.textMd}}>Provisionado: <b style={{color:T.text}}>{fmtRs(d.provTotal)}</b> · Saldo: <b style={{color:corSaldo(d.saldoTotal)}}>{fmtRs(d.saldoTotal)}</b></span>
+            <span style={{fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Realizado sobre Orçado</span>
+            <span style={{fontSize:11,color:T.textMd}}>Realizado: <b style={{color:T.text}}>{fmtRs(d.provTotal)}</b> · Saldo: <b style={{color:corSaldo(d.saldoTotal)}}>{fmtRs(d.saldoTotal)}</b></span>
           </div>
           <div style={{height:20,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${(pctProv*100).toFixed(1)}%`,background:"linear-gradient(90deg,#1e3a8a,#3b82f6)",transition:"width .3s"}}/>
@@ -155,11 +155,11 @@ function SlideFixos({ d, T }) {
       </Card>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
-          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado × Provisionado × Realizado (NFs) × Saldo</h4>
+          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado × Realizado × NFs recebidas × Saldo</h4>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
               <thead><tr style={{background:T.bg}}>
-                {["Seção","Orçado","Provisionado","Realizado (NFs)","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
+                {["Seção","Orçado","Realizado","NFs recebidas","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {d.sections.map(s => {
@@ -187,7 +187,7 @@ function SlideFixos({ d, T }) {
                         <td colSpan={5} style={{padding:"6px 12px 10px 24px"}}>
                           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                             <thead><tr>
-                              {["Item","Tipo","Fator","Orçado","Provisionado","Realizado (NF)","Saldo"].map((h,i)=>(
+                              {["Item","Tipo","Fator","Orçado","Realizado","NFs recebidas","Saldo"].map((h,i)=>(
                                 <th key={h} style={{padding:"3px 8px",textAlign:i===0?"left":"right",color:T.textSm,borderBottom:`1px solid ${T.border}`}}>{h}</th>
                               ))}
                             </tr></thead>
@@ -230,57 +230,53 @@ function SlideFixos({ d, T }) {
 
 // ─── VIEW VISÃO GERAL ────────────────────────────────────────────────────────
 function SlideVisaoGeral({ vg, T }) {
-  const pilar = (titulo, orcLabel, orc, prov, real, saldo) => (
+  const pilar = (titulo, orcLabel, orc, prov, saldo) => (
     <Card T={T}>
       <div style={{padding:"18px 22px",textAlign:"center"}}>
         <p style={{fontSize:12,fontWeight:800,color:T.text,margin:"0 0 10px"}}>{titulo}</p>
         <p style={{fontSize:12,color:T.textMd,margin:"0 0 4px"}}>{orcLabel}: <b style={{color:T.text}}>{fmtR(orc)}</b></p>
-        <p style={{fontSize:12,color:T.textMd,margin:"0 0 4px"}}>Provisionado: <b style={{color:T.text}}>{fmtR(prov)}</b></p>
-        <p style={{fontSize:12,color:T.textMd,margin:"0 0 8px"}}>Realizado (NFs): <b style={{color:"#16a34a"}}>{fmtR(real)}</b></p>
+        <p style={{fontSize:12,color:T.textMd,margin:"0 0 8px"}}>Realizado: <b style={{color:T.text}}>{fmtR(prov)}</b></p>
         <p style={{fontSize:15,fontWeight:800,color:saldo>=0?"#16a34a":"#dc2626",margin:0}}>Saldo: {seta(saldo)}</p>
       </div>
     </Card>
   );
-  const mkRow = (label, orc, prov, real, sal, pct) => (
+  const mkRow = (label, orc, prov, sal, pct) => (
     <tr key={label} style={{borderBottom:`1px solid ${T.border}`}}>
       <td style={{...tdSty(false),color:T.text,fontWeight:600}}>{label}</td>
       <td style={{...tdSty(true),color:T.textMd}} className="num">{fmtR(orc)}</td>
       <td style={{...tdSty(true),color:T.text}} className="num">{fmtR(prov)}</td>
-      <td style={{...tdSty(true),color:"#16a34a"}} className="num">{fmtR(real)}</td>
       <td style={{...tdSty(true),fontWeight:700,color:sal>=0?"#a3e635":"#ef4444"}} className="num">{seta(sal)}</td>
       <td style={{...tdSty(true),fontWeight:700,color:sal>=0?"#a3e635":"#ef4444"}} className="num">{sal>=0?"▲ ":"▼ "}{Math.abs(pct).toFixed(1)}%</td>
     </tr>
   );
   return (
     <div>
-      <TituloView icone={LayoutGrid} cor="#7c3aed" corFundo="rgba(124,58,237,0.12)" titulo="Visão Geral Orçamentária" subtitulo="Consolidado dos pilares: Variáveis + Fixos · saldo = orçado − provisionado" T={T}/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16,marginBottom:20}}>
+      <TituloView icone={LayoutGrid} cor="#7c3aed" corFundo="rgba(124,58,237,0.12)" titulo="Visão Geral Orçamentária" subtitulo="Consolidado dos pilares: Variáveis + Fixos · saldo = orçado − realizado" T={T}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16,marginBottom:20}}>
         <KPI label="Orçamento Total do Campeonato" value={fmtR(vg.orcTotalCampeonato)} sub="Variáveis + Fixos (anual)" color={T.textSm} T={T}/>
-        <KPI label="Provisionado (Atual)" value={fmtR(vg.provTotalGlobal)} sub={`Variáveis até R${vg.rodadaAtual} + Fixos até ${vg.mesLabel}`} color={T.text} T={T}/>
-        <KPI label="Realizado (NFs)" value={fmtR(vg.realTotalGlobal)} sub="Notas já recebidas" color="#16a34a" T={T}/>
-        <KPI label="Saldo Global" value={seta(vg.saldoGlobal)} sub={`${Math.abs(vg.saldoGlobalPct).toFixed(1)}% do orçado do período · Orçado − Provisionado`} color={vg.saldoGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
+        <KPI label="Realizado (Atual)" value={fmtR(vg.provTotalGlobal)} sub={`Variáveis até R${vg.rodadaAtual} + Fixos até ${vg.mesLabel}`} color={T.text} T={T}/>
+        <KPI label="Saldo Global" value={seta(vg.saldoGlobal)} sub={`${Math.abs(vg.saldoGlobalPct).toFixed(1)}% do orçado do período · Orçado − Realizado`} color={vg.saldoGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
       </div>
       <p style={{textAlign:"center",fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Síntese dos Pilares</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:20}}>
-        {pilar("Dinâmica Operacional (Custos Variáveis)", `Orçado até R${vg.rodadaAtual}`, vg.varOrc, vg.varProv, vg.varReal, vg.varSaldo)}
-        {pilar("Estrutura (Custos Fixos)", `Orçado até ${vg.mesLabel}`, vg.fixOrcAcum, vg.fixProv, vg.fixReal, vg.fixSaldo)}
+        {pilar("Dinâmica Operacional (Custos Variáveis)", `Orçado até R${vg.rodadaAtual}`, vg.varOrc, vg.varProv, vg.varSaldo)}
+        {pilar("Estrutura (Custos Fixos)", `Orçado até ${vg.mesLabel}`, vg.fixOrcAcum, vg.fixProv, vg.fixSaldo)}
       </div>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
           <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:560}}>
               <thead><tr style={{background:T.bg}}>
-                {["Bloco","Orçado (Período)","Provisionado","Realizado (NFs)","Saldo","%"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
+                {["Bloco","Orçado (Período)","Realizado","Saldo","%"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {mkRow(`1  Serviços Variáveis (R1–R${vg.rodadaAtual})`, vg.varOrc, vg.varProv, vg.varReal, vg.varSaldo, vg.savVarPct)}
-                {mkRow(`2  Custos Fixos (até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixProv, vg.fixReal, vg.fixSaldo, vg.savFixPct)}
+                {mkRow(`1  Serviços Variáveis (R1–R${vg.rodadaAtual})`, vg.varOrc, vg.varProv, vg.varSaldo, vg.savVarPct)}
+                {mkRow(`2  Custos Fixos (até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixProv, vg.fixSaldo, vg.savFixPct)}
               </tbody>
               <tfoot><tr style={{background:T.bg}}>
                 <td style={{...tdSty(false),fontWeight:700,color:T.textSm,textTransform:"uppercase",fontSize:11,letterSpacing:1}}>Total</td>
                 <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(vg.orcTotalPeriodo)}</td>
                 <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(vg.provTotalGlobal)}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:"#16a34a"}} className="num">{fmtR(vg.realTotalGlobal)}</td>
                 <td style={{...tdSty(true),fontWeight:700,color:vg.saldoGlobal>=0?"#a3e635":"#ef4444"}} className="num">{seta(vg.saldoGlobal)}</td>
                 <td style={{...tdSty(true),fontWeight:700,color:vg.saldoGlobal>=0?"#a3e635":"#ef4444"}} className="num">{vg.saldoGlobal>=0?"▲ ":"▼ "}{Math.abs(vg.saldoGlobalPct).toFixed(1)}%</td>
               </tr></tfoot>
