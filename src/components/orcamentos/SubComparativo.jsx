@@ -63,30 +63,6 @@ const BarraDelta = ({ delta, maxAbs, T }) => {
   );
 };
 
-// Resumo compacto exibido no cabeçalho quando a categoria está recolhida.
-const ChipsResumo = ({ rows, T }) => {
-  const contagem = { addon: 0, nao_realizado: 0, removido: 0, aumento: 0, reducao: 0 };
-  rows.forEach(r => { if (contagem[r.status] !== undefined) contagem[r.status]++; });
-  const chips = Object.entries(contagem).filter(([, n]) => n > 0);
-  return (
-    <span style={{display:"inline-flex",gap:6,marginLeft:10,alignItems:"center",flexWrap:"wrap"}}>
-      <span style={{fontSize:10,fontWeight:500,color:T.textSm}}>
-        {rows.length} {rows.length === 1 ? "linha" : "linhas"}
-      </span>
-      {chips.map(([status, n]) => {
-        const s = SELOS[status];
-        return (
-          <span key={status} style={{
-            fontSize:9.5, fontWeight:700, whiteSpace:"nowrap",
-            padding:"1px 7px", borderRadius:999,
-            background:`${s.color}1c`, color:s.color, border:`1px solid ${s.color}44`,
-          }}>{n} {s.label}</span>
-        );
-      })}
-    </span>
-  );
-};
-
 const lsKeyRecolhidos = (orcId) => `hub_comparativo_recolhidos_${orcId}`;
 const lsKeyRef = (orcId) => `hub_comparativo_ref_${orcId}`;
 const SEM_ORDEM = {};   // referência estável: sem ordem manual salva
@@ -399,7 +375,6 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
             {chave && <Chevron size={14} color={T.textSm} style={{flexShrink:0,opacity:editando ? 0.35 : 1}}/>}
             <span style={{width:8,height:8,borderRadius:2,background:color,flexShrink:0}}/>
             {titulo}
-            {!aberto && rows && rows.length > 0 && <ChipsResumo rows={rows} T={T}/>}
           </span>
         </td>
         <td className="num" style={numBase("base", { peso:"grupo" })}>{fmt(tot.totalBase)}</td>
@@ -507,7 +482,6 @@ export default function SubComparativo({ orc, setOrc, readOnly, T }) {
               <span style={{fontSize:11,fontWeight:800,letterSpacing:"0.08em",textTransform:"uppercase",color:b.color}}>{b.label}</span>
               <span style={{fontSize:10,color:T.textSm}}>{b.sub}</span>
             </span>
-            {!aberto && b.rows.length > 0 && <ChipsResumo rows={b.rows} T={T}/>}
           </span>
         </td>
         {cel("base", b.totalBase, V.totalBase)}

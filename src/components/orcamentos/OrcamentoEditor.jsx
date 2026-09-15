@@ -19,13 +19,14 @@ import SubResumo from "./SubResumo";
 import SubComparativo from "./SubComparativo";
 
 export const SUBTABS = [
-  { key:"config",      label:"Configuração",        icon:Settings },
+  // Ordem pedida pelo financeiro (15/09/2026): o que se apresenta primeiro, a configuração por último.
+  { key:"resumo",      label:"Resumo",              icon:LineChart },
+  { key:"comparativo", label:"Comparativo",         icon:GitCompareArrows },
+  { key:"servicos",    label:"Serviços Fixos",      icon:Briefcase },
+  { key:"jogos",       label:"Jogos",               icon:CalendarDays },
   { key:"premissas",   label:"Padrões & Premissas", icon:Layers },
   { key:"pracas",      label:"Praças & Logística",  icon:MapPin },
-  { key:"jogos",       label:"Jogos",               icon:CalendarDays },
-  { key:"servicos",    label:"Serviços Fixos",      icon:Briefcase },
-  { key:"comparativo", label:"Comparativo",         icon:GitCompareArrows },
-  { key:"resumo",      label:"Resumo",              icon:LineChart },
+  { key:"config",      label:"Configuração",        icon:Settings },
 ];
 
 // Visualizador (entidade) vê só o que é proposta: valores por jogo, fixos,
@@ -88,7 +89,7 @@ export default function OrcamentoEditor({
   const [orc, setOrcRaw]         = useState(null);
   const [eventos, setEventosRaw] = useState([]);
   const [loading, setLoading]    = useState(true);
-  const [sub, setSub]            = useState(canEdit ? "config" : "resumo");
+  const [sub, setSub]            = useState("resumo");
   const tabs = useMemo(() => canEdit ? SUBTABS : SUBTABS.filter(t => SUBTABS_VIEWER.includes(t.key)), [canEdit]);
   const [showAprovar, setShowAprovar] = useState(false);
   const persistRefs = useRef({}).current;
