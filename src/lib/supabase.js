@@ -185,17 +185,39 @@ export async function restoreBackup(key, stepsBack = 0) {
 export function createPersistedSetter(key, setRaw, persistRefs, { empty = [], debounceMs = 0 } = {}) {
   if (!persistRefs[key]) persistRefs[key] = { pending: [], timer: null, queue: Promise.resolve(), inFlight: 0 };
   const s = persistRefs[key];
+  // Grava lendo o estado ATUAL do servidor e reaplicando as funções pendentes
+  // (nunca sobrescreve com o estado local). Se ler ou gravar falhar (timeout,
+  // rede), tenta de novo com espera crescente; esgotadas as tentativas, AVISA
+  // o operador — antes só ia pro console e a alteração sumia em silêncio
+  // (NF do Fornazari R27, 15/09/2026: aprovada e registrada no histórico, mas
+  // nunca gravada em "notas").
+  const TENTATIVAS = 3;
   const flush = () => {
     const fns = s.pending; s.pending = [];
     s.inFlight++;
     s.queue = s.queue.then(async () => {
+      let ultimoErro = null;
       try {
-        const atual = await getState(key);
-        let next = atual != null ? atual : empty;
-        for (const f of fns) next = typeof f === "function" ? f(next) : f;
-        await setState(key, next);
-      } catch (err) {
-        console.error(`Falha ao persistir "${key}" no Supabase:`, err);
+        for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+          try {
+            const atual = await getState(key);
+            let next = atual != null ? atual : empty;
+            for (const f of fns) next = typeof f === "function" ? f(next) : f;
+            await setState(key, next);
+            ultimoErro = null;
+            break;
+          } catch (err) {
+            ultimoErro = err;
+            console.error(`Falha ao persistir "${key}" (tentativa ${tentativa}/${TENTATIVAS}):`, err);
+            if (tentativa < TENTATIVAS) await new Promise(r => setTimeout(r, 1500 * tentativa));
+          }
+        }
+        if (ultimoErro) {
+          const msg = `NÃO FOI POSSÍVEL GRAVAR "${key}" no servidor após ${TENTATIVAS} tentativas.\n\n`
+            + `A tela mostra a alteração, mas ela NÃO está salva. Anote o que acabou de fazer, `
+            + `recarregue a página e refaça.\n\nDetalhe: ${ultimoErro?.message || ultimoErro}`;
+          if (typeof alert === "function") alert(msg); else console.error(msg);
+        }
       } finally {
         s.inFlight--;
       }
