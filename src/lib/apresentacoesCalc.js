@@ -61,9 +61,10 @@ export function calcVariaveis({ jogos = [], rodadaSel = null, overrides = {}, nf
 // mesSel === null → mês corrente; rodadaSel === null → última rodada divulgada.
 // overrides: { [secao]: {prov?, gasto?} } (strings). provTotOvr/gastoTotOvr:
 // "" = automático.
-// ORÇADO segue o dashboard: soma cheia do campo `orcado` dos itens da aba
-// Serviços, sem rateio por mês/rodada e sem override manual — a fonte é uma só.
-// O rateio temporal vale apenas para o PROVISIONADO (leitura "até o mês").
+// ORÇADO tem fonte única: o campo `orcado` dos itens da aba Serviços (mesma
+// base do dashboard), rateado até o mês/rodada de referência conforme o "tipo"
+// do item. Não aceita override manual — se o número está errado, corrige-se
+// na aba Serviços, e dashboard e apresentação mudam juntos.
 export function calcFixos({
   servicos = [], notasMensais = [], jogos = [],
   mesSel = null, rodadaSel = null, mesInicio = 0, mesFim = 11,
@@ -79,7 +80,7 @@ export function calcFixos({
   const mesesCampeonato = Math.max(1, mesFim - mesInicio + 1);
   const mesesDecorridos = Math.max(0, Math.min(mesAtual, mesFim) - mesInicio + 1);
 
-  // Provisionado acumulado por-item conforme flag "tipo":
+  // Orçado e provisionado acumulados por-item conforme flag "tipo":
   //   linear  → total / mesesCampeonato * mesesDecorridos
   //   pontual → total integral a partir do mês alocado
   //   misto   → parte linear /mesesCampeonato + parte pontual a partir do mês alocado
@@ -97,8 +98,23 @@ export function calcFixos({
     const idsItens = itens.map(it => it.id);
     const orcAnual = itens.reduce((s, it) => s + (it.orcado || 0), 0);
     const provAnual = itens.reduce((s, it) => s + (it.provisionado || 0), 0);
-    // Orçado = anual cheio (mesma base do dashboard / fixosCalc)
-    const orcAuto = orcAnual;
+    const orcAuto = itens.reduce((s, it) => {
+      const orc = it.orcado || 0;
+      const tipo = it.tipo || "linear";
+      if (tipo === "por_rodada") { const tot = it.rodadasTotal || 1; return s + orc * Math.min(rodadaAtual, tot) / tot; }
+      if (tipo === "pontual") return s + orc * pontualRatio(it);
+      if (tipo === "misto") {
+        const pl = it.parcelaLinear || 0;
+        const pp = it.parcelaPontual || 0;
+        const tot = pl + pp;
+        if (tot > 0) {
+          const rL = pl / tot;
+          return s + (orc * rL / mesesCampeonato) * mesesDecorridos + orc * (1 - rL) * pontualRatio(it);
+        }
+        return s + (orc / mesesCampeonato) * mesesDecorridos;
+      }
+      return s + (orc / mesesCampeonato) * mesesDecorridos;
+    }, 0);
     const itensDebug = itens.map(it => {
       if (it.status === "encerrado") return { nome: it.nome, tipo: "encerrado", prov: it.realAoEncerrar || 0, ratio: null, contribui: it.realAoEncerrar || 0, mesesAlocacao: [] };
       const prov = it.provisionado || 0;
@@ -150,7 +166,7 @@ export function calcFixos({
   // View aplicando overrides (strings prontas para inputs)
   const sectionsView = sections.map(s => ({
     ...s,
-    orc:   fmtNum(s.orcAuto), // sem override: orçado é o do dashboard
+    orc:   fmtNum(s.orcAuto), // sem override: fonte única é a aba Serviços
     prov:  overrides[s.secao]?.prov  ?? fmtNum(s.provAuto),
     gasto: overrides[s.secao]?.gasto ?? fmtNum(s.gastoAuto),
   }));

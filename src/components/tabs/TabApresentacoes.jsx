@@ -130,9 +130,10 @@ function SlideFixos({ d, T, saldoUsaGasto }) {
     <div>
       <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Capital estrutural estritamente sob controle até o mês de ${d.mesLabel}.`} T={T}/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:20}}>
-        <KPI label="Orçado" value={fmtR(d.orcTotEff)} sub={`Campeonato (${d.mesesCampeonato} meses) · mesma base do dashboard`} color={T.textSm} T={T}/>
-        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.realizadoEff)} sub={saldoUsaGasto?"Base: gasto (NFs)":`Base: provisionado · ${d.mesesDecorridos} meses decorridos`} color={T.info} T={T}/>
-        <KPI label="Saldo" value={(d.saldoTotEff>=0?"▲ ":"▼ ")+fmtR(Math.abs(d.saldoTotEff))} sub={`${fmtR(d.orcTotEff)} − ${fmtR(d.realizadoEff)}`} color={d.saldoTotEff>=0?"#22c55e":"#ef4444"} T={T}/>
+        <KPI label="Orçamento Total" value={fmtR(d.orcAnualTotal)} sub={`Campeonato (${d.mesesCampeonato} meses) · aba Serviços`} color={T.textSm} T={T}/>
+        <KPI label={`Orçado Acum. até ${d.mesLabel}`} value={fmtR(d.orcTotEff)} sub={`${d.mesesDecorridos} meses decorridos`} color="#94a3b8" T={T}/>
+        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.realizadoEff)} sub={saldoUsaGasto?"Base: gasto (NFs)":"Base: provisionado mensal"} color={T.info} T={T}/>
+        <KPI label="Saldo Acumulado" value={(d.saldoTotEff>=0?"▲ ":"▼ ")+fmtR(Math.abs(d.saldoTotEff))} sub={`${fmtR(d.orcTotEff)} − ${fmtR(d.realizadoEff)}`} color={d.saldoTotEff>=0?"#22c55e":"#ef4444"} T={T}/>
       </div>
       <Card T={T} style={{marginBottom:16}}>
         <div style={{padding:"16px 20px"}}>
@@ -147,11 +148,11 @@ function SlideFixos({ d, T, saldoUsaGasto }) {
       </Card>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
-          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado × Provisionado × Realizado × Saldo</h4>
+          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado Acumulado × Provisionado × Realizado × Saldo</h4>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
               <thead><tr style={{background:T.bg}}>
-                {["Seção","Orçado","Provisionado","Realizado (NFs)","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
+                {["Seção","Orçado Acum.","Provisionado","Realizado (NFs)","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {d.rows.map(r => {
@@ -252,7 +253,7 @@ function SlideVisaoGeral({ vg, T }) {
       <p style={{textAlign:"center",fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Síntese dos Pilares</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:20}}>
         {pilar("Dinâmica Operacional (Custos Variáveis)", "Orçamento do Período", vg.varOrc, vg.varReal, "Realizado", vg.varSaving, "Saldo")}
-        {pilar("Estrutura (Custos Fixos)", "Orçado do campeonato", vg.fixOrcAcum, vg.fixReal, `Realizado até ${vg.mesLabel}`, vg.fixSaldo, "Saldo")}
+        {pilar("Estrutura Acumulada (Custos Fixos)", `Orçado até ${vg.mesLabel}`, vg.fixOrcAcum, vg.fixReal, `Realizado até ${vg.mesLabel}`, vg.fixSaldo, `Saldo até ${vg.mesLabel}`)}
       </div>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
@@ -263,7 +264,7 @@ function SlideVisaoGeral({ vg, T }) {
               </tr></thead>
               <tbody>
                 {mkRow(`1  Serviços Variáveis (R1–R${vg.rodadaAtual})`, vg.varOrc, vg.varReal, vg.varSaving, vg.savVarPct)}
-                {mkRow(`2  Custos Fixos (orçado cheio · realizado até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixReal, vg.fixSaldo, vg.savFixPct)}
+                {mkRow(`2  Custos Fixos (até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixReal, vg.fixSaldo, vg.savFixPct)}
               </tbody>
               <tfoot><tr style={{background:T.bg}}>
                 <td style={{...tdSty(false),fontWeight:700,color:T.textSm,textTransform:"uppercase",fontSize:11,letterSpacing:1}}>Total</td>
@@ -377,12 +378,12 @@ function AjustesFixos({ d, T, provTotOvr, gastoTotOvr, setField, setFixField, re
             <select value={d.rodadaAtual} onChange={e=>setField("fixRodada",parseInt(e.target.value))} style={{...IS}}>
               {d.rodadasDisp.map(r => <option key={r} value={r}>Rodada {r}</option>)}
             </select>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Itens "por rodada" acumulam {Math.round(Math.min(d.rodadaAtual, 13)/13*100)}% / {Math.round(Math.min(d.rodadaAtual, 7)/7*100)}% do provisionado</p>
+            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Itens "por rodada" acumulam {Math.round(Math.min(d.rodadaAtual, 13)/13*100)}% / {Math.round(Math.min(d.rodadaAtual, 7)/7*100)}% do orçado/provisionado</p>
           </div>}
           <div style={{marginBottom:16}}>
-            <label style={lbl}>Orçado {badge("#1e3a8a","#93c5fd","DASHBOARD")}</label>
-            <input readOnly value={fmtNum(d.orcTotal)} style={IS_RO} title="Soma do orçado dos itens da aba Serviços"/>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Soma cheia da aba Serviços · sem rateio · edite lá</p>
+            <label style={lbl}>Orçado Acumulado até {d.mesLabel} {badge("#1e3a8a","#93c5fd","ABA SERVIÇOS")}</label>
+            <input readOnly value={fmtNum(d.orcTotal)} style={IS_RO} title="Orçado dos itens da aba Serviços, rateado até o mês de referência"/>
+            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Anual: {fmtR(d.orcAnualTotal)} · rateado até {d.mesLabel} · edite na aba Serviços</p>
           </div>
         </div>
         <div style={grid3}>
@@ -412,7 +413,7 @@ function AjustesFixos({ d, T, provTotOvr, gastoTotOvr, setField, setFixField, re
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
             <thead><tr style={{background:T.bg}}>
-              {["Seção","Orçado (R$)","Gasto (R$)","Realizado (R$)","Saldo (R$)"].map((h,i) => (
+              {["Seção","Orçado Acum. (R$)","Gasto (R$)","Realizado (R$)","Saldo (R$)"].map((h,i) => (
                 <th key={h} style={{padding:"10px 12px",textAlign:i===0?"left":"right",color:T.textSm,fontSize:11,borderBottom:`1px solid ${T.border}`}}>{h}</th>
               ))}
             </tr></thead>
@@ -422,7 +423,7 @@ function AjustesFixos({ d, T, provTotOvr, gastoTotOvr, setField, setFixField, re
                 return (
                   <tr key={s.secao} style={{borderBottom:`1px solid ${T.border}`}}>
                     <td style={{padding:"6px 12px",fontWeight:700,color:"#3b82f6",fontSize:13}}>{s.secao}</td>
-                    <td style={{padding:"4px 12px",textAlign:"right",color:T.textMd,fontSize:13}} className="num" title="Orçado vem da aba Serviços (dashboard)">{s.orc}</td>
+                    <td style={{padding:"4px 12px",textAlign:"right",color:T.textMd,fontSize:13}} className="num" title="Orçado vem da aba Serviços, rateado até o mês">{s.orc}</td>
                     <td style={{padding:"4px 12px",textAlign:"right"}}><input value={s.gasto} onChange={e=>setFixField(s.secao,"gasto",e.target.value)} style={{...iSty(T),width:130,textAlign:"right",padding:"4px 8px",color:"#22c55e"}}/></td>
                     <td style={{padding:"4px 12px",textAlign:"right"}}><input value={s.prov} onChange={e=>setFixField(s.secao,"prov",e.target.value)} style={{...iSty(T),width:130,textAlign:"right",padding:"4px 8px",color:"#3b82f6"}}/></td>
                     <td style={{padding:"6px 12px",textAlign:"right",fontWeight:700,color:sav>=0?"#a3e635":"#ef4444"}}>{sav>=0?"▲ ":"▼ "}{fmtR(Math.abs(sav))}</td>
