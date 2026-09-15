@@ -116,6 +116,25 @@ const rpcIndisponivel = err =>
 
 // Acrescenta `entry` (objeto ou array de objetos) na lista `key`. Se algum
 // elemento com o mesmo clientRef já estiver lá (reenvio após falha), não grava.
+// Acrescenta UMA nota (de jogo ou mensal) à lista do campeonato de forma
+// atômica no servidor (RPC append_nota, idempotente por id). AGUARDADA: se não
+// gravar, lança — quem chama decide (ex.: devolver a submissão à fila). Nasceu
+// da NF do Fornazari R27 (15/09/2026): aprovada e no histórico, mas a regravação
+// da lista inteira em "notas" falhou em silêncio e a nota sumiu.
+// Retorna true se gravou, false se já existia (retentativa).
+export async function appendNota(key, nota) {
+  if (bloqueadoPorLeitura(`gravar nota em ${key}`)) return false;
+  const { data, error } = await comTimeout(supabase.rpc('append_nota', { k: key, entry: nota }), `gravar nota em ${key}`);
+  if (!error) return data !== false;
+  if (!rpcIndisponivel(error)) throw error;
+  // RPC ainda não criado no projeto: leitura + regravação, mas AGUARDADA (falha propaga).
+  console.warn(`RPC append_nota indisponível — regravando "${key}" inteira`);
+  const atual = (await getState(key)) || [];
+  if (atual.some(n => n.id === nota.id)) return false;
+  await setState(key, [...atual, nota]);
+  return true;
+}
+
 export async function appendState(key, entry) {
   if (bloqueadoPorLeitura(`acrescentar em ${key}`)) return;
   const { error } = await comTimeout(supabase.rpc('append_app_state_list', { k: key, entry }), `acrescentar em ${key}`);

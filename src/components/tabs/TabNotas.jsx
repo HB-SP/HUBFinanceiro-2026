@@ -6,7 +6,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { KPI, Pill } from "../shared";
 import { fmt, subTotal, parseValorBR } from "../../utils";
 import { CATS, btnStyle, iSty, RADIUS } from "../../constants";
-import { fileToDataUrl, saveNFFile, getNFFile, nfFileExiste, deleteNFFile, getState, setState as setSupabaseState, appendState, removeFromStateList } from "../../lib/supabase";
+import { fileToDataUrl, saveNFFile, getNFFile, nfFileExiste, deleteNFFile, getState, setState as setSupabaseState, appendState, appendNota, removeFromStateList } from "../../lib/supabase";
 import { pushHistorico } from "../../lib/historico";
 import { usePortalLink } from "../../hooks/usePortalLink";
 import { getOperacionaisPorSubKey, findFornecedorTolerante, emiteNF } from "../../lib/portalLink";
@@ -596,7 +596,7 @@ function NFAvulsaModal({ jogos, fornecedores, onSave, onClose, T }) {
 
 
 // ─── RECEBIDAS (submissões do formulário externo) ────────────────────────────
-function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos, fornecedores = [], T, submissionsKey = 'nf_submissions', historicoKey = 'nf_historico', formHash = '#formulario' }) {
+function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, addNotaAtomica, addNotaMensalAtomica, jogos, fornecedores = [], T, submissionsKey = 'nf_submissions', historicoKey = 'nf_historico', formHash = '#formulario' }) {
   const [submissions, setSubmissions] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -778,8 +778,26 @@ function RecebidasTab({ notas, notasMensais = [], addNota, addNotaMensal, jogos,
         const removed = await removeFromStateList(submissionsKey, sub.id);
         if (!removed) return;
         const nota = montarNotaAprovada(sub, editVals);
-        if (sub.tipo === "mensal" && addNotaMensal) addNotaMensal(nota);
-        else addNota(nota);
+        // Gravação da NOTA no servidor, AGUARDADA e atômica (RPC append_nota,
+        // idempotente por id). Se falhar, a submissão VOLTA para a fila e o
+        // operador é avisado — antes a nota só entrava no estado local e a
+        // regravação da lista inteira podia falhar em silêncio (NF Fornazari
+        // R27, 15/09/2026: "aprovada" no histórico, ausente em "notas").
+        try {
+          if (sub.tipo === "mensal" && (addNotaMensalAtomica || addNotaMensal)) {
+            if (addNotaMensalAtomica) await addNotaMensalAtomica(nota); else addNotaMensal(nota);
+          } else if (addNotaAtomica) {
+            await addNotaAtomica(nota);
+          } else {
+            addNota(nota);
+          }
+        } catch (err) {
+          // Devolve à fila sem clientRef: o RPC da fila deduplica por clientRef
+          // e uma irmã multi-jogo ainda pendente engoliria a devolução.
+          try { const { clientRef: _cr, ...semRef } = sub; await appendState(submissionsKey, semRef); }
+          catch (e2) { console.error("Falhou também ao devolver a submissão à fila:", e2); }
+          throw new Error(`A NF NÃO foi gravada (${err?.message || err}). Ela voltou para a fila de Recebidas — aprove de novo.`);
+        }
         // Histórico por último, best-effort: a aprovação em si já está de pé.
         // clientRef sai da entrada — ele é chave de dedupe dos ENVIOS do
         // formulário; deixá-lo aqui faria o irmão multi-jogo ser engolido.
@@ -1164,7 +1182,7 @@ function InlineFornecedor({ value, onChange, fornecedores, T }) {
   );
 }
 
-export default function TabNotas({ notas, setNotas, jogos, setJogos, fornecedores = [], envios = [], setEnvios, fornecedoresJogo = {}, setFornecedoresJogo, notasMensais = [], setNotasMensais, T, submissionsKey = 'nf_submissions', historicoKey = 'nf_historico', formHash = '#formulario', usarPortal = true, subsExcluirExtra = [], dedupeNotasPorNF = false, role = 'admin', onReembolsoCriado }) {
+export default function TabNotas({ notas, setNotas, jogos, setJogos, fornecedores = [], envios = [], setEnvios, fornecedoresJogo = {}, setFornecedoresJogo, notasMensais = [], setNotasMensais, T, notasKey = 'notas', notasMensaisKey = 'notas_mensais', setNotasLocal, setNotasMensaisLocal, submissionsKey = 'nf_submissions', historicoKey = 'nf_historico', formHash = '#formulario', usarPortal = true, subsExcluirExtra = [], dedupeNotasPorNF = false, role = 'admin', onReembolsoCriado }) {
   const canEdit = role === 'admin';
   const subsExcluir = subsExcluirExtra.length ? new Set([...SUBS_EXCLUIR, ...subsExcluirExtra]) : SUBS_EXCLUIR;
   const { portal: _portalRaw } = usePortalLink('brasileirao', { enabled: usarPortal });
@@ -1362,6 +1380,22 @@ export default function TabNotas({ notas, setNotas, jogos, setJogos, fornecedore
     setShowAvulsa(false);
     setShowLivemode(false);
   };
+
+  // Versão atômica do addNota, usada pela aprovação em Recebidas: grava no
+  // servidor (RPC append_nota, idempotente) e SÓ ENTÃO reflete no estado local
+  // (setNotasLocal = setter cru do pai; sem ele cai no setter persistido, que
+  // regrava a lista mas é idempotente). Lança se não gravar.
+  const addNotaAtomica = async notaOriginal => {
+    const nota = { ...notaOriginal, fornecedor: grafiaCanonica(notaOriginal.fornecedor, fornecedores) };
+    await appendNota(notasKey, nota);
+    const semDup = ns => ns.some(x => x.id === nota.id) ? ns : [...ns, nota];
+    if (setNotasLocal) setNotasLocal(semDup); else setNotas(semDup);
+  };
+  const addNotaMensalAtomica = (setNotasMensais || setNotasMensaisLocal) ? async nota => {
+    await appendNota(notasMensaisKey, nota);
+    const semDup = ms => ms.some(x => x.id === nota.id) ? ms : [...ms, nota];
+    if (setNotasMensaisLocal) setNotasMensaisLocal(semDup); else setNotasMensais(semDup);
+  } : null;
 
   const deleteNota = id => {
     const nota = notas.find(n => n.id === id);
@@ -1882,7 +1916,7 @@ export default function TabNotas({ notas, setNotas, jogos, setJogos, fornecedore
 
       {/* ── RECEBIDAS (do formulário externo) ── */}
       {tab === "recebidas" && (
-        <RecebidasTab notas={notas} notasMensais={notasMensais} addNota={addNota} addNotaMensal={setNotasMensais ? (nota => setNotasMensais(ms => [...ms, nota])) : null} jogos={jogos} fornecedores={fornecedores} T={T} submissionsKey={submissionsKey} historicoKey={historicoKey} formHash={formHash}/>
+        <RecebidasTab notas={notas} notasMensais={notasMensais} addNota={addNota} addNotaAtomica={addNotaAtomica} addNotaMensalAtomica={addNotaMensalAtomica} addNotaMensal={setNotasMensais ? (nota => setNotasMensais(ms => [...ms, nota])) : null} jogos={jogos} fornecedores={fornecedores} T={T} submissionsKey={submissionsKey} historicoKey={historicoKey} formHash={formHash}/>
       )}
 
       {showRegistrar && <RegistrarNFModal jogosRodada={jogosRodada} notasExistentes={notas} fornecedores={fornecedores} onSave={addNota} onClose={() => setShowRegistrar(null)} T={T} portal={portal} subsExcluir={subsExcluir}/>}
