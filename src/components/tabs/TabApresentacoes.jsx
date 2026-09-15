@@ -122,78 +122,85 @@ function SlideVariaveis({ d, T }) {
 }
 
 // ─── VIEW CUSTOS FIXOS ───────────────────────────────────────────────────────
-function SlideFixos({ d, T, saldoUsaGasto }) {
+// Regra: orçado e provisionado = aba Serviços rateada até o mês/rodada;
+// realizado = NFs recebidas; saldo = orçado − provisionado. Sem overrides.
+const corTipo = (tipo, T) => tipo === "pontual" ? "#d97706" : tipo === "por_rodada" ? "#2563eb" : tipo === "misto" ? "#7c3aed" : tipo === "encerrado" ? "#6b7280" : T.textSm;
+const seta = v => (v >= 0 ? "▲ " : "▼ ") + fmtR(Math.abs(v));
+const corSaldo = v => v >= 0 ? "#22c55e" : "#ef4444";
+
+function SlideFixos({ d, T }) {
   const [expandedSecs, setExpandedSecs] = useState({});
   const toggleSec = secao => setExpandedSecs(prev => ({...prev, [secao]: !prev[secao]}));
-  const pctReal = Math.min(1, d.realizadoEff / (d.orcTotEff || 1));
+  const pctProv = Math.min(1, d.provTotal / (d.orcTotal || 1));
   return (
     <div>
-      <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Capital estrutural estritamente sob controle até o mês de ${d.mesLabel}.`} T={T}/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))",gap:16,marginBottom:20}}>
+      <TituloView icone={Lock} cor={T.info} corFundo={T.info+"1f"} titulo="Custos Fixos" subtitulo={`Aba Serviços rateada até ${d.mesLabel} · realizado = NFs recebidas · saldo = orçado − provisionado`} T={T}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,marginBottom:20}}>
         <KPI label="Orçamento Total" value={fmtR(d.orcAnualTotal)} sub={`Campeonato (${d.mesesCampeonato} meses) · aba Serviços`} color={T.textSm} T={T}/>
-        <KPI label={`Orçado Acum. até ${d.mesLabel}`} value={fmtR(d.orcTotEff)} sub={`${d.mesesDecorridos} meses decorridos`} color="#94a3b8" T={T}/>
-        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.realizadoEff)} sub={saldoUsaGasto?"Base: gasto (NFs)":"Base: provisionado mensal"} color={T.info} T={T}/>
-        <KPI label="Saldo Acumulado" value={(d.saldoTotEff>=0?"▲ ":"▼ ")+fmtR(Math.abs(d.saldoTotEff))} sub={`${fmtR(d.orcTotEff)} − ${fmtR(d.realizadoEff)}`} color={d.saldoTotEff>=0?"#22c55e":"#ef4444"} T={T}/>
+        <KPI label={`Orçado até ${d.mesLabel}`} value={fmtR(d.orcTotal)} sub={`${d.mesesDecorridos} de ${d.mesesCampeonato} meses`} color="#94a3b8" T={T}/>
+        <KPI label={`Provisionado até ${d.mesLabel}`} value={fmtR(d.provTotal)} sub="Mesmo rateio do orçado" color={T.info} T={T}/>
+        <KPI label={`Realizado até ${d.mesLabel}`} value={fmtR(d.gastoTotal)} sub="NFs recebidas" color="#16a34a" T={T}/>
+        <KPI label="Saldo" value={seta(d.saldoTotal)} sub="Orçado − Provisionado" color={corSaldo(d.saldoTotal)} T={T}/>
       </div>
       <Card T={T} style={{marginBottom:16}}>
         <div style={{padding:"16px 20px"}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-            <span style={{fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Comparativo Orçado vs Realizado</span>
-            <span style={{fontSize:11,color:T.textMd}}>Realizado: <b style={{color:T.text}}>{fmtRs(d.realizadoEff)}</b> · Saldo: <b style={{color:d.saldoTotEff>=0?"#22c55e":"#ef4444"}}>{fmtRs(d.saldoTotEff)}</b></span>
+            <span style={{fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>Provisionado sobre Orçado</span>
+            <span style={{fontSize:11,color:T.textMd}}>Provisionado: <b style={{color:T.text}}>{fmtRs(d.provTotal)}</b> · Saldo: <b style={{color:corSaldo(d.saldoTotal)}}>{fmtRs(d.saldoTotal)}</b></span>
           </div>
           <div style={{height:20,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${(pctReal*100).toFixed(1)}%`,background:"linear-gradient(90deg,#14532d,#22c55e)",transition:"width .3s"}}/>
+            <div style={{height:"100%",width:`${(pctProv*100).toFixed(1)}%`,background:"linear-gradient(90deg,#1e3a8a,#3b82f6)",transition:"width .3s"}}/>
           </div>
         </div>
       </Card>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
-          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado Acumulado × Provisionado × Realizado × Saldo</h4>
+          <h4 style={{margin:"0 0 12px",color:T.text,fontSize:13,fontWeight:700}}>Seções — Orçado × Provisionado × Realizado (NFs) × Saldo</h4>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
               <thead><tr style={{background:T.bg}}>
-                {["Seção","Orçado Acum.","Provisionado","Realizado (NFs)","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
+                {["Seção","Orçado","Provisionado","Realizado (NFs)","Saldo"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {d.rows.map(r => {
-                  const debug = d.sections.find(x => x.secao === r.secao)?.itensDebug || [];
-                  const expanded = !!expandedSecs[r.secao];
+                {d.sections.map(s => {
+                  const expanded = !!expandedSecs[s.secao];
                   return (
-                    <Fragment key={r.secao}>
+                    <Fragment key={s.secao}>
                     <tr style={{borderBottom:`1px solid ${T.border}`}}>
                       <td style={{...tdSty(false),fontWeight:700,color:T.info}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          {debug.length > 0 && (
-                            <button onClick={()=>toggleSec(r.secao)} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:T.textSm,display:"flex",alignItems:"center"}}>
+                          {s.itens.length > 0 && (
+                            <button onClick={()=>toggleSec(s.secao)} style={{background:"none",border:"none",cursor:"pointer",padding:0,color:T.textSm,display:"flex",alignItems:"center"}}>
                               {expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
                             </button>
                           )}
-                          {r.secao}
+                          {s.secao}
                         </div>
                       </td>
-                      <td style={{...tdSty(true),color:T.textMd}} className="num">{fmtR(r.orc)}</td>
-                      <td style={{...tdSty(true),color:T.text}} className="num">{r.secao === "Outros Mensais" ? "—" : fmtR(r.prov)}</td>
-                      <td style={{...tdSty(true),color:T.text}} className="num">{fmtR(r.gasto)}</td>
-                      <td style={{...tdSty(true),fontWeight:700,color:r.saldo>=0?"#a3e635":"#ef4444"}} className="num">{r.saldo>=0?"▲ ":"▼ "}{fmtR(Math.abs(r.saldo))}</td>
+                      <td style={{...tdSty(true),color:T.textMd}} className="num">{s.outros ? "—" : fmtR(s.orc)}</td>
+                      <td style={{...tdSty(true),color:T.text}} className="num">{s.outros ? "—" : fmtR(s.prov)}</td>
+                      <td style={{...tdSty(true),color:"#16a34a"}} className="num">{fmtR(s.gasto)}</td>
+                      <td style={{...tdSty(true),fontWeight:700,color:s.outros?T.textSm:corSaldo(s.saldo)}} className="num">{s.outros ? "—" : seta(s.saldo)}</td>
                     </tr>
-                    {debug.length > 0 && expanded && (
+                    {expanded && s.itens.length > 0 && (
                       <tr style={{background:T.bg}}>
                         <td colSpan={5} style={{padding:"6px 12px 10px 24px"}}>
                           <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                             <thead><tr>
-                              {["Item","Tipo","Prov. Anual","Meses Aloc.","Ratio/Fator","Contribui"].map((h,i)=>(
+                              {["Item","Tipo","Fator","Orçado","Provisionado","Realizado (NF)","Saldo"].map((h,i)=>(
                                 <th key={h} style={{padding:"3px 8px",textAlign:i===0?"left":"right",color:T.textSm,borderBottom:`1px solid ${T.border}`}}>{h}</th>
                               ))}
                             </tr></thead>
                             <tbody>
-                              {debug.map(it => (
-                                <tr key={it.nome}>
+                              {s.itens.map(it => (
+                                <tr key={it.id}>
                                   <td style={{padding:"3px 8px",color:T.textMd}}>{it.nome}</td>
-                                  <td style={{padding:"3px 8px",textAlign:"right",color:it.tipo==="pontual"?"#d97706":it.tipo==="linear"?T.textSm:"#7c3aed"}}>{it.tipo}</td>
-                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.text}} className="num">{fmtBRL(it.prov)}</td>
-                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.textSm}}>{it.mesesAlocacao?.length ? it.mesesAlocacao.map(m => MESES_SHORT[m] ?? m).join(", ") : "—"}</td>
-                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.textSm}}>{it.ratio !== null ? `${(it.ratio*100).toFixed(0)}%` : `÷${d.mesesCampeonato}×${d.mesesDecorridos}`}</td>
-                                  <td style={{padding:"3px 8px",textAlign:"right",fontWeight:700,color:T.info}} className="num">{fmtBRL(it.contribui)}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:corTipo(it.tipo,T)}} title={it.mesesAlocacao.length ? "Meses: "+it.mesesAlocacao.map(m => MESES_SHORT[m] ?? m).join(", ") : it.rodadasTotal ? `${it.rodadasTotal} rodadas` : ""}>{it.tipo}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.textSm}}>{it.tipo === "encerrado" ? "congelado" : `${(it.fator*100).toFixed(0)}%`}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.textMd}} className="num" title={`Anual: ${fmtBRL(it.orcAnual)}`}>{fmtBRL(it.orc)}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:T.text}} className="num" title={`Anual: ${fmtBRL(it.provAnual)}`}>{fmtBRL(it.prov)}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",color:"#16a34a"}} className="num">{fmtBRL(it.nf)}</td>
+                                  <td style={{padding:"3px 8px",textAlign:"right",fontWeight:700,color:corSaldo(it.orc-it.prov)}} className="num">{seta(it.orc-it.prov)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -204,14 +211,14 @@ function SlideFixos({ d, T, saldoUsaGasto }) {
                     </Fragment>
                   );
                 })}
-                {d.rows.length === 0 && <tr><td colSpan={5} style={{padding:24,textAlign:"center",color:T.textSm,fontSize:12}}>Nenhuma seção no portal</td></tr>}
+                {d.sections.length === 0 && <tr><td colSpan={5} style={{padding:24,textAlign:"center",color:T.textSm,fontSize:12}}>Nenhuma seção na aba Serviços</td></tr>}
               </tbody>
               <tfoot><tr style={{background:T.bg}}>
                 <td style={{...tdSty(false),fontWeight:700,color:T.textSm,textTransform:"uppercase",fontSize:11,letterSpacing:1}}>Total</td>
                 <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(d.orcTotal)}</td>
                 <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(d.provTotal)}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(d.gastoTotal)}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:d.saldoTotal>=0?"#a3e635":"#ef4444"}} className="num">{d.saldoTotal>=0?"▲ ":"▼ "}{fmtR(Math.abs(d.saldoTotal))}</td>
+                <td style={{...tdSty(true),fontWeight:700,color:"#16a34a"}} className="num">{fmtR(d.gastoTotal)}</td>
+                <td style={{...tdSty(true),fontWeight:700,color:corSaldo(d.saldoTotal)}} className="num">{seta(d.saldoTotal)}</td>
               </tr></tfoot>
             </table>
           </div>
@@ -223,55 +230,59 @@ function SlideFixos({ d, T, saldoUsaGasto }) {
 
 // ─── VIEW VISÃO GERAL ────────────────────────────────────────────────────────
 function SlideVisaoGeral({ vg, T }) {
-  const pilar = (titulo, orcLabel, orc, real, realLabel, saldo, saldoLabel) => (
+  const pilar = (titulo, orcLabel, orc, prov, real, saldo) => (
     <Card T={T}>
       <div style={{padding:"18px 22px",textAlign:"center"}}>
         <p style={{fontSize:12,fontWeight:800,color:T.text,margin:"0 0 10px"}}>{titulo}</p>
         <p style={{fontSize:12,color:T.textMd,margin:"0 0 4px"}}>{orcLabel}: <b style={{color:T.text}}>{fmtR(orc)}</b></p>
-        <p style={{fontSize:12,color:T.textMd,margin:"0 0 8px"}}>{realLabel}: <b style={{color:T.text}}>{fmtR(real)}</b></p>
-        <p style={{fontSize:15,fontWeight:800,color:saldo>=0?"#16a34a":"#dc2626",margin:0}}>{saldoLabel}: {saldo>=0?"▲ ":"▼ "}{fmtR(Math.abs(saldo))}</p>
+        <p style={{fontSize:12,color:T.textMd,margin:"0 0 4px"}}>Provisionado: <b style={{color:T.text}}>{fmtR(prov)}</b></p>
+        <p style={{fontSize:12,color:T.textMd,margin:"0 0 8px"}}>Realizado (NFs): <b style={{color:"#16a34a"}}>{fmtR(real)}</b></p>
+        <p style={{fontSize:15,fontWeight:800,color:saldo>=0?"#16a34a":"#dc2626",margin:0}}>Saldo: {seta(saldo)}</p>
       </div>
     </Card>
   );
-  const mkRow = (label, orc, real, sav, pct) => (
+  const mkRow = (label, orc, prov, real, sal, pct) => (
     <tr key={label} style={{borderBottom:`1px solid ${T.border}`}}>
       <td style={{...tdSty(false),color:T.text,fontWeight:600}}>{label}</td>
       <td style={{...tdSty(true),color:T.textMd}} className="num">{fmtR(orc)}</td>
-      <td style={{...tdSty(true),color:T.text}} className="num">{fmtR(real)}</td>
-      <td style={{...tdSty(true),fontWeight:700,color:sav>=0?"#a3e635":"#ef4444"}} className="num">{sav>=0?"▲ ":"▼ "}{fmtR(Math.abs(sav))}</td>
-      <td style={{...tdSty(true),fontWeight:700,color:sav>=0?"#a3e635":"#ef4444"}} className="num">{sav>=0?"▲ ":"▼ "}{Math.abs(pct).toFixed(1)}%</td>
+      <td style={{...tdSty(true),color:T.text}} className="num">{fmtR(prov)}</td>
+      <td style={{...tdSty(true),color:"#16a34a"}} className="num">{fmtR(real)}</td>
+      <td style={{...tdSty(true),fontWeight:700,color:sal>=0?"#a3e635":"#ef4444"}} className="num">{seta(sal)}</td>
+      <td style={{...tdSty(true),fontWeight:700,color:sal>=0?"#a3e635":"#ef4444"}} className="num">{sal>=0?"▲ ":"▼ "}{Math.abs(pct).toFixed(1)}%</td>
     </tr>
   );
   return (
     <div>
-      <TituloView icone={LayoutGrid} cor="#7c3aed" corFundo="rgba(124,58,237,0.12)" titulo="Visão Geral Orçamentária" subtitulo="Consolidado dos pilares: Variáveis + Fixos" T={T}/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:16,marginBottom:20}}>
+      <TituloView icone={LayoutGrid} cor="#7c3aed" corFundo="rgba(124,58,237,0.12)" titulo="Visão Geral Orçamentária" subtitulo="Consolidado dos pilares: Variáveis + Fixos · saldo = orçado − provisionado" T={T}/>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16,marginBottom:20}}>
         <KPI label="Orçamento Total do Campeonato" value={fmtR(vg.orcTotalCampeonato)} sub="Variáveis + Fixos (anual)" color={T.textSm} T={T}/>
-        <KPI label="Realizado (Atual)" value={fmtR(vg.realTotalGlobal)} sub={`Variáveis até R${vg.rodadaAtual} + Fixos até ${vg.mesLabel}`} color={T.text} T={T}/>
-        <KPI label="Saving / Saldo Global" value={(vg.savingGlobal>=0?"▲ ":"▼ ")+fmtR(Math.abs(vg.savingGlobal))} sub={`${Math.abs(vg.savingGlobalPct).toFixed(1)}% vs. orçado do período`} color={vg.savingGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
+        <KPI label="Provisionado (Atual)" value={fmtR(vg.provTotalGlobal)} sub={`Variáveis até R${vg.rodadaAtual} + Fixos até ${vg.mesLabel}`} color={T.text} T={T}/>
+        <KPI label="Realizado (NFs)" value={fmtR(vg.realTotalGlobal)} sub="Notas já recebidas" color="#16a34a" T={T}/>
+        <KPI label="Saldo Global" value={seta(vg.saldoGlobal)} sub={`${Math.abs(vg.saldoGlobalPct).toFixed(1)}% do orçado do período · Orçado − Provisionado`} color={vg.saldoGlobal>=0?"#22c55e":"#ef4444"} T={T}/>
       </div>
       <p style={{textAlign:"center",fontSize:11,color:T.textSm,fontWeight:700,letterSpacing:2,textTransform:"uppercase",margin:"0 0 12px"}}>Síntese dos Pilares</p>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:16,marginBottom:20}}>
-        {pilar("Dinâmica Operacional (Custos Variáveis)", "Orçamento do Período", vg.varOrc, vg.varReal, "Realizado", vg.varSaving, "Saldo")}
-        {pilar("Estrutura Acumulada (Custos Fixos)", `Orçado até ${vg.mesLabel}`, vg.fixOrcAcum, vg.fixReal, `Realizado até ${vg.mesLabel}`, vg.fixSaldo, `Saldo até ${vg.mesLabel}`)}
+        {pilar("Dinâmica Operacional (Custos Variáveis)", `Orçado até R${vg.rodadaAtual}`, vg.varOrc, vg.varProv, vg.varReal, vg.varSaldo)}
+        {pilar("Estrutura (Custos Fixos)", `Orçado até ${vg.mesLabel}`, vg.fixOrcAcum, vg.fixProv, vg.fixReal, vg.fixSaldo)}
       </div>
       <Card T={T} style={{marginBottom:20}}>
         <div style={{padding:"16px 20px"}}>
           <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",minWidth:560}}>
+            <table style={{width:"100%",borderCollapse:"collapse",minWidth:640}}>
               <thead><tr style={{background:T.bg}}>
-                {["Bloco","Orçado (Período)","Realizado","Saving / Saldo","%"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
+                {["Bloco","Orçado (Período)","Provisionado","Realizado (NFs)","Saldo","%"].map((h,i)=><th key={h} style={thSty(T,i>0)}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {mkRow(`1  Serviços Variáveis (R1–R${vg.rodadaAtual})`, vg.varOrc, vg.varReal, vg.varSaving, vg.savVarPct)}
-                {mkRow(`2  Custos Fixos (até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixReal, vg.fixSaldo, vg.savFixPct)}
+                {mkRow(`1  Serviços Variáveis (R1–R${vg.rodadaAtual})`, vg.varOrc, vg.varProv, vg.varReal, vg.varSaldo, vg.savVarPct)}
+                {mkRow(`2  Custos Fixos (até ${vg.mesLabel})`, vg.fixOrcAcum, vg.fixProv, vg.fixReal, vg.fixSaldo, vg.savFixPct)}
               </tbody>
               <tfoot><tr style={{background:T.bg}}>
                 <td style={{...tdSty(false),fontWeight:700,color:T.textSm,textTransform:"uppercase",fontSize:11,letterSpacing:1}}>Total</td>
                 <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(vg.orcTotalPeriodo)}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(vg.realTotalGlobal)}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:vg.savingGlobal>=0?"#a3e635":"#ef4444"}} className="num">{vg.savingGlobal>=0?"▲ ":"▼ "}{fmtR(Math.abs(vg.savingGlobal))}</td>
-                <td style={{...tdSty(true),fontWeight:700,color:vg.savingGlobal>=0?"#a3e635":"#ef4444"}} className="num">{vg.savingGlobal>=0?"▲ ":"▼ "}{Math.abs(vg.savingGlobalPct).toFixed(1)}%</td>
+                <td style={{...tdSty(true),fontWeight:700,color:T.text}} className="num">{fmtR(vg.provTotalGlobal)}</td>
+                <td style={{...tdSty(true),fontWeight:700,color:"#16a34a"}} className="num">{fmtR(vg.realTotalGlobal)}</td>
+                <td style={{...tdSty(true),fontWeight:700,color:vg.saldoGlobal>=0?"#a3e635":"#ef4444"}} className="num">{seta(vg.saldoGlobal)}</td>
+                <td style={{...tdSty(true),fontWeight:700,color:vg.saldoGlobal>=0?"#a3e635":"#ef4444"}} className="num">{vg.saldoGlobal>=0?"▲ ":"▼ "}{Math.abs(vg.saldoGlobalPct).toFixed(1)}%</td>
               </tr></tfoot>
             </table>
           </div>
@@ -348,100 +359,6 @@ function AjustesVariaveis({ d, T, nfEspOvr, nfRecOvr, setField, setVarField, res
           <div><label style={lbl}>Notas Esperadas {badge("#052e16","#4ade80","AUTO · editável")}</label><input value={nfEspOvr !== "" ? nfEspOvr : fmtNum(d.autoNfEspV)} onChange={e=>setField("nfEsp",e.target.value)} style={{...IS}}/></div>
           <div><label style={lbl}>Notas Recebidas {badge("#052e16","#4ade80","AUTO · editável")}</label><input value={nfRecOvr !== "" ? nfRecOvr : fmtNum(d.autoNfRecV)} onChange={e=>setField("nfRec",e.target.value)} style={{...IS,color:"#22c55e"}}/></div>
           <div><label style={lbl}>Pendentes {badge("#052e16","#4ade80","AUTO")}</label><input readOnly value={fmtNum(d.nfPend)} style={{...IS_RO,color:"#d97706"}}/></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AjustesFixos({ d, T, provTotOvr, gastoTotOvr, setField, setFixField, resetFix, saldoUsaGasto }) {
-  const IS = {...iSty(T), width:"100%"};
-  const IS_RO = {...IS, background:T.bg, cursor:"default"};
-  const grid3 = {display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:20};
-  const secHdr = {fontSize:11,fontWeight:700,letterSpacing:2,textTransform:"uppercase",color:T.text,marginBottom:16};
-  const secNum = {fontSize:10,color:T.textSm,fontWeight:700,marginRight:8};
-  const lbl = {color:T.textSm,fontSize:11,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:1};
-  const badge = (bg,fg,txt) => <span style={{background:bg,color:fg,fontSize:9,padding:"1px 5px",borderRadius:2,marginLeft:4}}>{txt}</span>;
-  return (
-    <div>
-      <div style={{background:T.card,borderRadius:12,padding:"20px 24px",marginBottom:20}}>
-        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:18}}><span style={secNum}>01</span><span style={secHdr}>Configuração Base</span></div>
-        <div style={grid3}>
-          <div style={{marginBottom:16}}>
-            <label style={lbl}>Mês de Referência *</label>
-            <select value={d.mesAtual} onChange={e=>setField("fixMes",parseInt(e.target.value))} style={{...IS}}>
-              {MESES_FIX.map((m,i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-          </div>
-          {d.rodadasDisp.length > 0 && <div style={{marginBottom:16}}>
-            <label style={lbl}>Rodada de Referência {badge("#1e40af","#93c5fd","POR RODADA")}</label>
-            <select value={d.rodadaAtual} onChange={e=>setField("fixRodada",parseInt(e.target.value))} style={{...IS}}>
-              {d.rodadasDisp.map(r => <option key={r} value={r}>Rodada {r}</option>)}
-            </select>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Itens "por rodada" acumulam {Math.round(Math.min(d.rodadaAtual, 13)/13*100)}% / {Math.round(Math.min(d.rodadaAtual, 7)/7*100)}% do orçado/provisionado</p>
-          </div>}
-          <div style={{marginBottom:16}}>
-            <label style={lbl}>Orçado Acumulado até {d.mesLabel} {badge("#1e3a8a","#93c5fd","ABA SERVIÇOS")}</label>
-            <input readOnly value={fmtNum(d.orcTotal)} style={IS_RO} title="Orçado dos itens da aba Serviços, rateado até o mês de referência"/>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Anual: {fmtR(d.orcAnualTotal)} · rateado até {d.mesLabel} · edite na aba Serviços</p>
-          </div>
-        </div>
-        <div style={grid3}>
-          <div style={{marginBottom:0}}>
-            <label style={lbl}>Realizado Acumulado até {d.mesLabel} {provTotOvr===""&&badge("#052e16","#4ade80","AUTO")}</label>
-            <input value={provTotOvr===""?fmtNum(d.provTotal):provTotOvr} onChange={e=>setField("provTot",e.target.value)} onFocus={()=>{if(provTotOvr==="")setField("provTot",fmtNum(d.provTotal));}} style={{...IS,color:"#3b82f6"}} title={`Auto: ${fmtR(d.provTotal)}`}/>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>Anual: {fmtR(d.provTotalAnualAll)} · auto: {fmtR(d.provTotal)}{provTotOvr!==""&&<span style={{color:"#f59e0b"}}> · override ativo</span>}</p>
-          </div>
-          <div style={{marginBottom:0}}>
-            <label style={lbl}>Gasto Acumulado até {d.mesLabel} {gastoTotOvr===""&&badge("#052e16","#4ade80","AUTO")}</label>
-            <input value={gastoTotOvr===""?fmtNum(d.gastoTotal):gastoTotOvr} onChange={e=>setField("gastoTot",e.target.value)} onFocus={()=>{if(gastoTotOvr==="")setField("gastoTot",fmtNum(d.gastoTotal));}} style={{...IS,color:"#22c55e"}} title={`Auto: ${fmtR(d.gastoTotal)}`}/>
-            {gastoTotOvr!==""&&<p style={{fontSize:10,color:"#f59e0b",margin:"4px 0 0"}}>override ativo · auto: {fmtR(d.gastoTotal)}</p>}
-          </div>
-          <div style={{marginBottom:0}}>
-            <label style={lbl}>Saldo até {d.mesLabel} (Orçado − {saldoUsaGasto?"Gasto":"Realizado"}) {badge("#052e16","#4ade80","AUTO")}</label>
-            <input readOnly value={fmtNum(d.saldoTotEff)} style={{...IS_RO, color: d.saldoTotEff >= 0 ? "#a3e635" : "#ef4444"}}/>
-            <p style={{fontSize:10,color:T.textSm,margin:"4px 0 0"}}>{fmtR(d.orcTotEff)} (orç.) − {fmtR(d.realizadoEff)} (real.) = {d.saldoTotEff >= 0 ? "▲" : "▼"} {fmtR(Math.abs(d.saldoTotEff))}</p>
-          </div>
-        </div>
-      </div>
-
-      <div style={{background:T.card,borderRadius:12,padding:"20px 24px",marginBottom:20}}>
-        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:8,marginBottom:18}}>
-          <div style={{display:"flex",alignItems:"baseline",gap:8}}><span style={secNum}>02</span><span style={secHdr}>Dados por Seção</span></div>
-          <button onClick={resetFix} style={{...btnStyle,background:T.border,color:T.text,padding:"5px 12px",fontSize:11}}>🔄 Re-sincronizar com portal</button>
-        </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
-            <thead><tr style={{background:T.bg}}>
-              {["Seção","Orçado Acum. (R$)","Gasto (R$)","Realizado (R$)","Saldo (R$)"].map((h,i) => (
-                <th key={h} style={{padding:"10px 12px",textAlign:i===0?"left":"right",color:T.textSm,fontSize:11,borderBottom:`1px solid ${T.border}`}}>{h}</th>
-              ))}
-            </tr></thead>
-            <tbody>
-              {d.sectionsView.map(s => {
-                const sav = saldoUsaGasto ? parseBR(s.orc) - parseBR(s.gasto) : parseBR(s.orc) - parseBR(s.prov);
-                return (
-                  <tr key={s.secao} style={{borderBottom:`1px solid ${T.border}`}}>
-                    <td style={{padding:"6px 12px",fontWeight:700,color:"#3b82f6",fontSize:13}}>{s.secao}</td>
-                    <td style={{padding:"4px 12px",textAlign:"right",color:T.textMd,fontSize:13}} className="num" title="Orçado vem da aba Serviços, rateado até o mês">{s.orc}</td>
-                    <td style={{padding:"4px 12px",textAlign:"right"}}><input value={s.gasto} onChange={e=>setFixField(s.secao,"gasto",e.target.value)} style={{...iSty(T),width:130,textAlign:"right",padding:"4px 8px",color:"#22c55e"}}/></td>
-                    <td style={{padding:"4px 12px",textAlign:"right"}}><input value={s.prov} onChange={e=>setFixField(s.secao,"prov",e.target.value)} style={{...iSty(T),width:130,textAlign:"right",padding:"4px 8px",color:"#3b82f6"}}/></td>
-                    <td style={{padding:"6px 12px",textAlign:"right",fontWeight:700,color:sav>=0?"#a3e635":"#ef4444"}}>{sav>=0?"▲ ":"▼ "}{fmtR(Math.abs(sav))}</td>
-                  </tr>
-                );
-              })}
-              {d.sectionsView.length === 0 && (
-                <tr><td colSpan={5} style={{padding:24,textAlign:"center",color:T.textSm,fontSize:12}}>Nenhuma seção no portal</td></tr>
-              )}
-            </tbody>
-            <tfoot><tr style={{background:T.bg}}>
-              <td style={{padding:"10px 12px",fontSize:11,color:T.textSm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Total</td>
-              <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:T.text}}>{fmtR(d.orcTotal)}</td>
-              <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:T.text}}>{fmtR(d.gastoTotal)}</td>
-              <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:"#3b82f6"}}>{fmtR(d.provTotal)}</td>
-              <td style={{padding:"10px 12px",textAlign:"right",fontWeight:700,color:d.saldoTotal>=0?"#a3e635":"#ef4444"}}>{d.saldoTotal>=0?"▲ ":"▼ "}{fmtR(Math.abs(d.saldoTotal))}</td>
-            </tr></tfoot>
-          </table>
         </div>
       </div>
     </div>
@@ -596,19 +513,15 @@ function SlideExtrato({ fech, rodada, T }) {
   );
 }
 
-export default function TabApresentacoes({ T, jogos = [], servicos = [], notasMensais = [], apres, setApres, orcGlobal = 0, mesInicio = 0, mesFim = 11, saldoUsaGasto = false, nomeCampeonato = "", notas = [], notasLivemode = [], notasLiveU = [], dedupeNotasPorNF = false, grupoDoJogo = null }) {
+export default function TabApresentacoes({ T, jogos = [], servicos = [], notasMensais = [], apres, setApres, orcGlobal = 0, mesInicio = 0, mesFim = 11, nomeCampeonato = "", notas = [], notasLivemode = [], notasLiveU = [], dedupeNotasPorNF = false, grupoDoJogo = null }) {
   const a = apres || {};
   const upd = updater => setApres(prev => updater(prev || {}));
   const setField = (field, v) => upd(p => ({ ...p, [field]: v }));
   const setVarField = (rodada, field, v) => upd(p => ({ ...p, varOverrides: { ...(p.varOverrides || {}), [rodada]: { ...((p.varOverrides || {})[rodada] || {}), [field]: v } } }));
-  const setFixField = (secao, field, v) => upd(p => ({ ...p, fixOverrides: { ...(p.fixOverrides || {}), [secao]: { ...((p.fixOverrides || {})[secao] || {}), [field]: v } } }));
   const resetVar = () => upd(p => ({ ...p, varOverrides: {}, nfEsp: "", nfRec: "" }));
-  const resetFix = () => upd(p => ({ ...p, fixOverrides: {}, orcTot: "", provTot: "", gastoTot: "" }));
 
   const nfEspOvr = a.nfEsp ?? "";
   const nfRecOvr = a.nfRec ?? "";
-  const provTotOvr = a.provTot ?? "";
-  const gastoTotOvr = a.gastoTot ?? "";
 
   const dadosVar = useMemo(() => calcVariaveis({
     jogos, rodadaSel: a.varRodada ?? null, overrides: a.varOverrides || {},
@@ -618,9 +531,7 @@ export default function TabApresentacoes({ T, jogos = [], servicos = [], notasMe
   const dadosFix = useMemo(() => calcFixos({
     servicos, notasMensais, jogos,
     mesSel: a.fixMes ?? null, rodadaSel: a.fixRodada ?? null, mesInicio, mesFim,
-    overrides: a.fixOverrides || {}, provTotOvr, gastoTotOvr,
-    saldoUsaGasto,
-  }), [servicos, notasMensais, jogos, a.fixMes, a.fixRodada, mesInicio, mesFim, a.fixOverrides, provTotOvr, gastoTotOvr, saldoUsaGasto]);
+  }), [servicos, notasMensais, jogos, a.fixMes, a.fixRodada, mesInicio, mesFim]);
 
   const vg = useMemo(() => calcVisaoGeral({ dadosVar, dadosFix, orcGlobalVar: orcGlobal }), [dadosVar, dadosFix, orcGlobal]);
 
@@ -645,7 +556,7 @@ export default function TabApresentacoes({ T, jogos = [], servicos = [], notasMe
     {value:"fixos",      label:"Custos Fixos",     icon:Lock},
     {value:"extrato",    label:"Extrato por Rodada", icon:Receipt},
   ];
-  const temAjustes = view === "variaveis" || view === "fixos";
+  const temAjustes = view === "variaveis"; // fixos não têm ajuste manual: fonte é a aba Serviços
   const teal = "#14b8a6";
 
   return (
@@ -702,8 +613,7 @@ export default function TabApresentacoes({ T, jogos = [], servicos = [], notasMe
       )}
       {view === "fixos" && (
         <ErrorBoundary>
-          <SlideFixos d={dadosFix} T={T} saldoUsaGasto={saldoUsaGasto}/>
-          {editMode && <AjustesFixos d={dadosFix} T={T} provTotOvr={provTotOvr} gastoTotOvr={gastoTotOvr} setField={setField} setFixField={setFixField} resetFix={resetFix} saldoUsaGasto={saldoUsaGasto}/>}
+          <SlideFixos d={dadosFix} T={T}/>
         </ErrorBoundary>
       )}
       {view === "extrato" && (
